@@ -28,14 +28,14 @@ Cross approximation of a function of a TT-tensor, Method 1
             #For this procedure we need only local (!) indices, since it
             #is more or less equivalent to orthogonalization; 
             d=tt.d; 
-            ps=tt.ps;
-            core=tt.core;
-            n=tt.n;
-            r=tt.r;
+            ps=tt.ps[:];
+            core=tt.core[:];
+            n=tt.n[:];
+            r=tt.r[:];
             
-            ry=y.r;
-            psy=y.ps;
-            cry=y.core;
+            ry=copy(y.r);
+            psy=copy(y.ps);
+            cry=copy(y.core);
             phi= Vector{Any}(undef,d+1);
             phi[d+1]=1;
             phi[1]=1;
@@ -57,18 +57,20 @@ Cross approximation of a function of a TT-tensor, Method 1
                 cr=transpose(cr); 
                 cry[pos1:pos1+ry[i+1]*n[i+1]*ry[i+2]-1]=cr[:];
                 pos1=pos1-ry[i]*n[i]*ry[i+1];
-                cr2=cr2*transpose(r1*rm); 
-                cry[pos1:pos1+ry[i]*n[i]*ry[i+1]-1]=cr2[:];
+                cr2=cr2*transpose(r1*rm);    
+                cry[pos1:pos1+ry[i]*n[i]*ry[i+1]-1].=cr2[:];   
+                
                 #Take phi matrix; convolve from right with current cors of V
                 cr0=core[ps[i+1]:ps[i+2]-1];
                 cr0=reshape(cr0,r[i+1]*n[i+1],r[i+2]); 
                 cr0=cr0*phi[i+2]; #cr0 is now r(i)*n(i)*ry(i+1);
                 cr0=reshape(cr0,r[i+1],n[i+1]*ry[i+2]);
                 phi[i+1]=cr0[:,ind]; 
+            
                 #  psy=cumsum([1;n.*ry(1:d).*ry(2:d+1)]);
-                #tmpy_core=cry;
-                #tmpy_r=ry;
-                #tmpy_ps=psy;
+                #tmpy_core=cry[:];
+                #tmpy_r=ry[:];
+                #tmpy_ps=psy[:];
                 #keyboard
                 
                 #Orthogonalization & maxvol is "local operation" (touches two
@@ -78,12 +80,13 @@ Cross approximation of a function of a TT-tensor, Method 1
             
             #Truncate cry
             #pos1=pos1-n(1)*r(2);
-            cry=cry[pos1:prod(size(cry))];
-            tmpy_core=cry;
-            tmpy_r=ry;
-            tmpy_ps=psy;
+            cry=cry[pos1:prod(size(cry))]; 
+            tmpy_core=cry[:];
+            tmpy_r=ry[:];
+            tmpy_ps=psy[:];
             #keyboard
             swp=1;
+            
             
             yold=[];
             not_converged = true;
@@ -91,8 +94,8 @@ Cross approximation of a function of a TT-tensor, Method 1
             last_sweep = false;
             while ( swp < n_sweeps && not_converged )
                 max_er=0;
-                cry_old=cry;
-                psy=cumsum([1;n.*ry[1:d].*ry[2:d+1]]);
+                cry_old=cry[:]; 
+                psy=cumsum([1;n.*ry[1:d].*ry[2:d+1]]); 
                 pos1=1;
                 
                 for i=1:d-1
@@ -104,10 +107,10 @@ Cross approximation of a function of a TT-tensor, Method 1
                     #Take current core; convolve it with 
                     #core=core(ps
                     #Compute (!) superblock and function (!) of it
-                    display(i);display(core);
+                    
                     cr1=core[ps[i]:ps[i+1]-1];
                     cr2=core[ps[i+1]:ps[i+2]-1];
-                    cr1=reshape(cr1,r[i],n[i]*r[i+1]);
+                    cr1=reshape(cr1,r[i],n[i]*r[i+1]); 
                     cr1=ps1*cr1;
                     cr2=reshape(cr2,r[i+1]*n[i+1],r[i+2]);
                     cr2=cr2*ps2;
@@ -115,38 +118,40 @@ Cross approximation of a function of a TT-tensor, Method 1
                     cr2=reshape(cr2,r[i+1],n[i+1]*ry[i+2]);
                     cr=cr1*cr2;
                     cr=reshape(cr,ry[i]*n[i],n[i+1]*ry[i+2]);
-                    cr=fun.(cr); #Elements are evaluated here!
+                    cr=fun.(cr);  #Elements are evaluated here!
                     cr=reshape(cr,ry[i]*n[i],n[i+1]*ry[i+2]);
                     #Check for local approximation of cr for the error
-                    cry1=cry[pos1:pos1+ry[i]*n[i]*ry[i+1]-1];
-                    cry2=cry_old[psy[i+1]:psy[i+2]-1];
+                    cry1=cry[pos1:pos1+ry[i]*n[i]*ry[i+1]-1]; 
+
+                    cry2=cry_old[psy[i+1]:psy[i+2]-1]; 
+
                     cry1=reshape(cry1,ry[i]*n[i],ry[i+1]);
                     cry2=reshape(cry2,ry[i+1],n[i+1]*ry[i+2]);
-                    appr=cry1*cry2;
+                    appr=cry1*cry2; 
                     er=norm(appr-cr)/norm(cr);
                     max_er=max(er,max_er);
                     #Compute SVD of cr
                     
                     if ((swp % dropsweeps)!=0 && (swp > 1) && !last_sweep)
-                        u,s,v=svd(cr-appr);
+                        u,s,v=svd(cr-appr); 
                     else
-                        u,s,v=svd(cr);
+                        u,s,v=svd(cr); 
                     end;
                     # s=diag(s);
-                    r2=rounded_diagonal_index(s,precision*norm(cr)/sqrt(d-1));
-                    s=s(1:r2); u=u(:,1:r2); v=v(:,1:r2);
+                    r2=rounded_diagonal_index(s,precision*norm(cr)/sqrt(d-1)); 
+                    s=s[1:r2]; u=u[:,1:r2]; v=v[:,1:r2]; 
                     
-                    v=conj(v)*diag(s);
+                    v=conj(v)*diagm(s);
                     
                     if ((swp % dropsweeps)!=0 && (swp > 1) && !last_sweep)
-                        u = [cry1 u];
+                        u = [cry1 u]; 
                         v = [transpose(cry2) v];
-                        u,rv=qr(u);
+                        u,rv=qr(u); u = Array(u); 
                         v = v*transpose(rv);         
                     else
                         if !last_sweep
                             #Kick rank of u
-                            ur=randn(size(u,1),kick_rank);
+                            ur=randn(size(u,1),kick_rank); 
                             #Orthogonalize ur to u by Golub-Kahan reorth
                             u=reort(u,ur); 
                             radd=size(u,2)-r2;
@@ -179,20 +184,27 @@ Cross approximation of a function of a TT-tensor, Method 1
                     u=u/r1; v=v*r1'; v=transpose(v);
                     #Compute new phi
                     ry[i+1]=r2;
+                    if length(cry) < pos1+ry[i]*n[i]*ry[i+1]-1 ## Substitutes MATLAB's bad allocation
+                        append!(cry,zeros(pos1+ry[i]*n[i]*ry[i+1]-1 - length(cry)))
+                    end
+
                     cry[pos1:pos1+ry[i]*n[i]*ry[i+1]-1]=u[:];
                     pos1=pos1+ry[i]*n[i]*ry[i+1];
+                    if length(cry) < pos1+ry[i+1]*n[i+1]*ry[i+2]-1 ## Substitutes MATLAB's bad allocation
+                        append!(cry,zeros(pos1+ry[i+1]*n[i+1]*ry[i+2]-1 - length(cry)))
+                    end
                     cry[pos1:pos1+ry[i+1]*n[i+1]*ry[i+2]-1]=v[:];
-                    
+
                     #Now we have to: cr1 with phi from the left 
-                    phi[i+1]=cr1[ind,:]; #phi[i+1]=phi[i+1];    
+                    phi[i+1]=cr1[ind,:]; #phi[i+1]=phi[i+1]; 
                 end
                 
                 #Truncate local memory
                 cry=cry[1:pos1+ry[d]*n[d]*ry[d+1]-1];
                 psy=cumsum([1;n.*ry[1:d].*ry[2:d+1]]);
-                tmpy_core=cry;
-                tmpy_r=ry;
-                tmpy_ps=psy;
+                tmpy_core=cry[:];
+                tmpy_r=ry[:];
+                tmpy_ps=psy[:];
                 #keyboard;
                 cry_old=cry;
                 #m=numel(cry);
@@ -219,7 +231,7 @@ Cross approximation of a function of a TT-tensor, Method 1
                     cr2=reshape(cr2,r[i+1],n[i+1]*ry[i+2]);
                     cr=cr1*cr2;
                     cr=reshape(cr,ry[i]*n[i],n[i+1]*ry[i+2]);
-                    cr=fun(cr); #Elements are evaluated here!
+                    cr=fun.(cr); #Elements are evaluated here!
                     cr=reshape(cr,ry[i]*n[i],n[i+1]*ry[i+2]);
                     #Check for local approximation of cr for the error
                     #cry1=cry(pos1-ry(i)*n(i)*ry(i+1):pos1-1);
@@ -228,7 +240,7 @@ Cross approximation of a function of a TT-tensor, Method 1
                     #cry1=cry(1:ry(i)*n(i)*ry(i+1));
                     #cry2=cry(ry(i)*n(i)*ry(i+1)+1:ry(i)*n(i)*ry(i+1)+ry(i+1)*n(i+1)*ry(i+2));
                     cry2=cry[1:ry[i+1]*n[i+1]*ry[i+2]];
-                    cry[1:ry[i+1]*n[i+1]*ry[i+2]]=[];
+                    cry = cry[ry[i+1]*n[i+1]*ry[i+2]+1:end];
                     #cry2=cry_old(psy(i+1):psy(i+2)-1);
                     #cry(1:(ry(i+1)*n(i+1)*ry(i+2)))=[]; #Delete both of first cores
                     #cry(1:ry(i)*n(i)*ry(i+1)+ry(i+1)*n(i+1)*ry(i+2))=[];
@@ -255,7 +267,7 @@ Cross approximation of a function of a TT-tensor, Method 1
                     if (mod(swp,dropsweeps)!=0)&&(swp>1)&&(!last_sweep)
                         u = [cry1 u];
                         v = [transpose(cry2) v];
-                        v,rv=qr(v);
+                        v,rv=qr(v); v = Array(v);
                         u = u*transpose(rv);
                     else
                         if (!last_sweep)
@@ -279,8 +291,9 @@ Cross approximation of a function of a TT-tensor, Method 1
                     u=u*r1';
                     #Compute new phi;
                     ry[i+1]=r2;
-                    u=u[:]; u=u'; v=v[:]; v=v';
-                    cry=[u v cry];
+                    u=u[:]; u=u'; v=v[:]; v=v'; 
+                    # cry=[u v cry]; 
+                    prepend!(cry,u,v);
                     #keyboard;
                     #We need new memory for
                     #cry(pos1:pos1+ry(i+1)*n(i+1)*ry(i+2)-1)=v(:); #Here memory has to be (?) enlarged 
@@ -294,7 +307,6 @@ Cross approximation of a function of a TT-tensor, Method 1
                     #end
                     #Now we have to: cr1 with phi from the left 
                     phi[i+1]=cr2[:,ind]; phi[i+1]=phi[i+1];
-                    
                 end
                 #Truncate local memory
                 #cry=cry(pos1:numel(cry));
@@ -302,11 +314,12 @@ Cross approximation of a function of a TT-tensor, Method 1
                 # keyboard;
                 psy=cumsum([1;n.*ry[1:d].*ry[2:d+1]]);
                 
-                tmpy_core=cry;
-                tmpy_r=ry;
-                tmpy_ps=psy;
+                tmpy_core=cry[:]; 
+                tmpy_r=ry[:];
+                tmpy_ps=psy[:];
                 #keyboard;
-                if ( isempty(yold) )
+                # if ( isempty(yold) )
+                if ( !isa(yold,TTTensor) )
                     yold=y;
                     er_nrm=1;
                 else
@@ -315,21 +328,22 @@ Cross approximation of a function of a TT-tensor, Method 1
                     yold=y;
                 end
                 if ( verb )
-                    @sprintf("sweep=%d, er=%3.2e er_nrm=%3.2e \n",swp,max_er,er_nrm);
+                    msg = @sprintf "sweep=%d, er=%3.2e er_nrm=%3.2e \n" swp max_er er_nrm;
+                    print(msg)
                 end
                 if (last_sweep)
                     break;
                 end;
                 if (er_nrm<precision)
                     last_sweep=true;
-                end;
+                end; 
                 swp=swp+1;
             end     
             psy=cumsum([1;n.*ry[1:d].*ry[2:d+1]]);
             
-            tmpy_core=cry;
-            tmpy_r=ry;
-            tmpy_ps=psy;
+            tmpy_core=cry[:];
+            tmpy_r=ry[:];
+            tmpy_ps=psy[:];
             
             return TTTensor(y.d,tmpy_r,y.n,tmpy_core,tmpy_ps,y.over)
         end
@@ -363,17 +377,18 @@ Cross approximation of a function of a TT-tensor, Method 1
             n=size(a,1); r=size(a,2);
             if ( n <= r )
                 ind = 1:n;
+                ## Not tested ##
                 return ind
             end
             
             if ( do_qr ) 
-                a,_ = qr(a);
+                a,_ = qr(a); a = Array(a); 
             end
             
             
             #Initialize
             if ( do_lu_full )
-                ind = lu_full(a); 
+                ind = lu_full(a); println("lu_full");
             else
                 _,_,p=lu(a);
                 ind = p[1:r];
@@ -396,7 +411,7 @@ Cross approximation of a function of a TT-tensor, Method 1
                 b = b + b[:,big_ind[2]]*(b[k,:]-b[big_ind[1],:])'/b[big_ind];
                 ind[big_ind[2]] = big_ind[1];
             end
-            
+            ## Not tested ##
             return ind
         end
         
@@ -484,9 +499,9 @@ Cross approximation of a function of a TT-tensor, Method 1
                 #     break;
                 # end;
                 # reort_flag=~isempty(find(norm_unew <= 0.25*norm_uadd,1));
-                reort_flag=~isempty(find(norm_unew <= 0.25*norm_uadd,1));
+                reort_flag=any(norm_unew .<= 0.25*norm_uadd);
                 
-                unew,_=qr(unew); #Here it is ok.
+                unew,_=qr(unew); unew = Array(unew) #Here it is ok. TO BE verified ###################################
                 if (reort_flag)
                     uadd=unew;
                     su=u'unew;
@@ -502,8 +517,8 @@ Cross approximation of a function of a TT-tensor, Method 1
                 end
             end
             if ( reort_flag )
-                disp("Reort failed to reort!");
-                y,_ =qr([u unew]);
+                display("Reort failed to reort!");
+                y,_ =qr([u unew]); y = Array(y)
             else
                 y=[u unew];
             end

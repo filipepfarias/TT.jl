@@ -51,7 +51,7 @@ function TTTensor(A::Array{Number,Integer},precision=1e-14)
         U,S,V = svd(c);
         # r1 = sum(cumsum(reverse(S) .^ 2) .< (e*norm(S))^2);
         # r1 = length(S) - r1;
-        r1 = rounded_diagonal_index(S,e)
+        r1 = rounded_diagonal_index(S,e); 
         U = U[:,1:r1]; S = S[1:r1]; V = V[:,1:r1];
 
         c = diagm(S)*V';
@@ -115,7 +115,7 @@ function TTTensor(tt::Vector{T} where T <: AbstractArray)
           n[i]=size(tt[i],1);
        end
        tmp_n=n;
-       tmp_ps   = cumsum([1;tmp_n.*tmp_r[1:tmp_d].*tmp_r[2:tmp_d+1]]);
+       tmp_ps = cumsum([1;tmp_n.*tmp_r[1:tmp_d].*tmp_r[2:tmp_d+1]]);
        crp=zeros(tmp_ps[d+1]-1);
        cc=tt[1];
        crp[tmp_ps[1]:tmp_ps[2]-1]=cc[:];
@@ -206,6 +206,18 @@ function qtt_x(n::Vector{Int}) ######################## To be moved
 end
 
 function rounded_diagonal_index(S::Vector,e::Float64)
+    # if (norm(S) == 0) 
+    #     return 1
+    # end
+
+    # if (precision <= 0) 
+    #     return prod(size(S))
+    # end
+
+    # S0 = cumsum(reverse(S) .^2 )
+    # ff = findall(S0 .< (precision .^ 2));
+   
+    # return isempty(ff) ?  prod(size(S)) : prod(size(S))-ff[end]
     r1 = sum(cumsum(reverse(S) .^ 2) .< (e*norm(S))^2);
     return length(S) - r1;
 end
@@ -244,3 +256,198 @@ function mem(cores::Vector{Array{Number,3}})
 end
 
 mem(A::TTTensor) = prod([ A.n .* A.r[1:A.d]; A.r[2:A.d + 1] ])
+
+"""
+Tensor of all ones
+   [TT]=TT_ONES(N,D), computes the d-dimensional TT-tensor of all ones 
+   with mode size equal to N
+
+   [TT]=TT_ONES(N), computes the TT-tensor of all ones with mode size 
+   given in the vector N
+
+
+ TT-Toolbox 2.2, 2009-2012
+
+This is TT Toolbox, written by Ivan Oseledets et al.
+Institute of Numerical Mathematics, Moscow, Russia
+webpage: http://spring.inm.ras.ru/osel
+
+For all questions, bugs and suggestions please mail
+ivan.oseledets@gmail.com
+---------------------------
+"""
+function tt_ones(n::Vector{Int})
+    
+    # if (numel(n) == 1)
+    #     if (numel(varargin)>0)
+    #         d=varargin{1}; 
+    #     else
+    #         d=1;
+    #     end;
+    #     if d>0
+    #         n=n*ones(1,d);
+    #     end
+    # else
+    #     d=numel(n);
+    # end
+    d = length(n);
+    # if d>0
+        tt=Vector{Array}(undef,d);
+        for k=1:d
+            tt[k] = ones(n[k]); #sqrt(n);
+        end
+        tt=TTTensor(tt); #Bydlocode @
+    # else
+    #     tt=TTTensor([[1.0]]);
+    # end
+    return tt
+end
+
+
+(-)(A::TTTensor,B::TTTensor) = A+(-1.0)*B;
+(-)(B::TTTensor) = (-1.0)*B;
+
+(+)(B::TTTensor) = B;
+(+)(B::TTTensor,a::Number) = a+B;
+
+function (+)(a::Number,B::TTTensor)
+    return a*tt_ones(B.n)
+end
+
+function (+)(B::TTTensor,C::TTTensor)
+    if B.d == C.d == 1
+        p = getproperty.([B],propertynames(B));
+        p[4] += C.core;
+        return TTTensor(p...,)
+    end
+    
+    n1=B.n;
+    r1=B.r;
+    r2=C.r;
+    d=B.d;
+    cr1=B.core;
+    cr2=C.core;
+    
+    # Determine size of the result
+    
+    r = r1+r2;
+    
+    @assert r1[1] == r2[1] "Inconsistent sizes in mode 1."
+    
+    r[1]=r1[1];
+    
+    @assert r1[d+1] == r2[d+1] "Inconsistent sizes in mode $(d+1)"
+    
+    r[d+1]=r1[d+1];
+    
+    n=n1;
+    A_d=d;
+    A_n=n;
+    A_r=r;
+    sz=(n.*r[1:d])'*r[2:d+1];
+    pos=(n.*r[1:d]) .* r[2:d+1];
+    pos=cumsum([1;pos]);
+    A_ps=pos;
+    cr=zeros(sz);
+    # if (strcmp(class(cr1),'mp'))
+    # cr = mp(cr);
+    # end 
+    pos1=B.ps; pos2=C.ps;
+    for i=1:d
+        pp=zeros(r[i],n[i],r[i+1]);
+        # if ( strcmp(class(cr1),'mp')) 
+        #     pp = mp(pp);
+        # end
+        p1=cr1[pos1[i]:pos1[i+1]-1];
+        p2=cr2[pos2[i]:pos2[i+1]-1];
+        p1=reshape(p1,r1[i],n[i],r1[i+1]);
+        p2=reshape(p2,r2[i],n[i],r2[i+1]);
+        pp[1:r1[i],:,1:r1[i+1]]=p1;
+        pp[r[i]-r2[i]+1:r[i],:,r[i+1]-r2[i+1]+1:r[i+1]]=p2;
+        cr[pos[i]:pos[i+1]-1]=pp[:];
+    end
+    A_core=cr;
+    
+    return TTTensor(A_d,A_r,A_n,A_core,A_ps,[0])
+end
+
+
+function (*)(a::VecOrMat,B::TTTensor)
+    d = B.d; 
+    cr1 = B.core[B.ps[1]:B.ps[2]-1]; 
+    cr1 = reshape(cr1, B.r[1], B.n[1]*B.r[2]);
+    rnew = length(a) == 1 ? B.r[1] : size(a,1);
+ 
+    dps = rnew*B.n[1]*B.r[2] - B.r[1]*B.n[1]*B.r[2];
+    cr1 = a*cr1;
+    
+    # c = b;
+    C_core=B.core[B.ps[2]:B.ps[d+1]-1];
+    C_core = [cr1[:]; C_core[:]];
+    C_ps = B.ps[:];
+    C_ps[2:d+1]=C_ps[2:d+1] .+ dps;
+    C_r = B.r[:];
+    C_r[1] = rnew;
+    
+    return TTTensor(B.d,C_r,B.n,C_core,C_ps,[0])
+end
+
+(*)(a::Number,B::TTTensor) = [a]*B;
+
+function (*)(B::TTTensor,a::VecOrMat)
+    d = B.d; 
+    crd = B.core[B.ps[d]:B.ps[d+1]-1]; 
+    crd = reshape(crd, B.r[d]*B.n[d], B.r[d+1]);
+    rnew = length(a) == 1 ? B.r[d+1] : size(a,2);
+ 
+    ps_new = B.ps[d] + B.r[d]*B.n[d]*rnew;
+    crd = crd*a;
+    
+    # c = b;
+    C_core = B.core[:];
+    if length(C_core) < ps_new-1
+        append!(C_core, zeros(ps_new-1 - length(C_core)))
+    end
+    C_core[B.ps[d]:ps_new-1] = crd[:];
+    C_core = C_core[1:ps_new-1];
+    C_ps = B.ps[:];
+    C_ps[d+1]= ps_new;
+    C_r = B.r[:];
+    C_r[d+1] = rnew;
+    
+    return TTTensor(B.d,C_r,B.n,C_core,C_ps,[0])
+end
+
+(*)(B::TTTensor,a::Number) = [a]*B;
+
+function norm(tt::TTTensor)
+    d=tt.d;
+    n=tt.n;
+    r=tt.r;
+    pos=tt.ps;
+    cr=tt.core;
+    pos1=1;
+    nrm=zeros(d,1);
+    core0=cr[1:r[1]*n[1]*r[2]];
+    
+    #Orthogonalization from left-to-tight
+    for i=1:d-1
+        core0=reshape(core0,r[i]*n[i],r[i+1]);
+        core0,ru=qr(core0); core0 = Array(core0);
+        nrm[i]=norm(ru);
+        nrm[i]=max(nrm[i],1e-308);
+        ru=ru./nrm[i];
+        core1=cr[pos[i+1]:pos[i+2]-1];
+        core1=reshape(core1,r[i+1],n[i+1]*r[i+2]);
+        core1=ru*core1;
+        r[i+1]=size(core0,2);
+        cr[pos1:pos1-1+r[i]*n[i]*r[i+1]]=core0[:];
+        cr[pos1+r[i]*n[i]*r[i+1]:pos1+r[i]*n[i]*r[i+1]+r[i+1]*n[i+1]*r[i+2]-1]=core1[:];
+        core0=core1;
+        pos1=pos1+r[i]*n[i]*r[i+1];
+    end
+    pos1=pos1+r[d]*n[d]*r[d+1]-1;
+    nrm[d]=norm(core0[:]);
+
+    return prod(nrm)
+end
