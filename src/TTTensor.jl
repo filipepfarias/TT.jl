@@ -205,21 +205,19 @@ function qtt_x(n::Vector{Int}) ######################## To be moved
     return res
 end
 
-function rounded_diagonal_index(S::Vector,e::Float64)
-    # if (norm(S) == 0) 
-    #     return 1
-    # end
+function rounded_diagonal_index(S::Vector,precision::Float64)
+    if (norm(S) == 0) 
+        return 1
+    end
 
-    # if (precision <= 0) 
-    #     return prod(size(S))
-    # end
+    if (precision <= 0) 
+        return prod(size(S))
+    end
 
-    # S0 = cumsum(reverse(S) .^2 )
-    # ff = findall(S0 .< (precision .^ 2));
+    S0 = cumsum(reverse(S) .^2 )
+    ff = findall(S0 .< (precision .^ 2));
    
-    # return isempty(ff) ?  prod(size(S)) : prod(size(S))-ff[end]
-    r1 = sum(cumsum(reverse(S) .^ 2) .< (e*norm(S))^2);
-    return length(S) - r1;
+    return isempty(ff) ?  prod(size(S)) : prod(size(S))-ff[end]
 end
 
 function size(A::TTTensor)
@@ -418,7 +416,7 @@ function (*)(B::TTTensor,a::VecOrMat)
     return TTTensor(B.d,C_r,B.n,C_core,C_ps,[0])
 end
 
-(*)(B::TTTensor,a::Number) = [a]*B;
+(*)(B::TTTensor,a::Number) = B*[a];
 
 function norm(tt::TTTensor)
     d=tt.d;
@@ -450,4 +448,107 @@ function norm(tt::TTTensor)
     nrm[d]=norm(core0[:]);
 
     return prod(nrm)
+end
+
+function dot(tt1::TTTensor,tt2::TTTensor,chunk_interval::Tuple,do_qr=false)
+    
+    @assert tt2.d>tt1.d "chunky dot is defined only if tt2.d>tt1.d"
+    
+    (chunk_start,chunk_end) = chunk_interval;
+
+    # chunk_start and chunk_end refer to tt1
+    tt2_chunk1 = chunk(tt2, chunk_start, chunk_end);
+    D = dot(tt1, tt2_chunk1, do_qr);
+    D = reshape(D, tt2.r(chunk_start), tt2.r(chunk_end+1));
+    p = [];
+    if (chunk_start>1)
+        tt2_chunk1 = chunk(tt2, 1, chunk_start-1);
+        p = tt2_chunk1*D;            
+    end;
+    if (chunk_end<tt2.d)
+        tt2_chunk2 = chunk(tt2, chunk_end+1, tt2.d);
+        if (isempty(p))
+            p = D*tt2_chunk2;
+        else
+            p = tkron(p, tt2_chunk2);
+        end;
+    end;
+    
+    return p;
+end
+
+function dot(tt1::TTTensor,tt2::TTTensor,do_qr=false)
+    
+    if (do_qr) 
+        error("Missing to implement.")
+        tt1,rv1=qr(tt1, "lr");
+        tt2,rv2=qr(tt2, "lr");
+    end;
+    
+    d=tt1.d; 
+    r1=tt1.r[:]; r2=tt2.r[:]; ps1=tt1.ps[:]; ps2=tt2.ps[:];
+    n=tt1.n[:];
+    core1=tt1.core[:]; core2=tt2.core[:];
+    
+    #ps is always r1(i-1)xr; but if there is a hanging thing? what to do?
+    #That means, I define a dot product of two "hanging" tensors as a matrix...
+    #brr.... And if it is hanging on the right? 
+    # 
+    # p=ones(r1(1),r2(1)); # Over r1(1) and r2(1) there is not summation blin.
+    # #So, if we just sum over n(1) separatedly and leave a strange QxR1(I)xR2(I)
+    # #matrix... 
+    # for i=1:d
+    #   cr1=core1(ps1(i):ps1(i+1)-1);
+    #   cr2=core2(ps2(i):ps2(i+1)-1);
+    #   p=reshape(p,[r1(i),r2(i)]);
+    #   cr2=reshape(cr2,[r2(i),numel(cr2)/r2(i)]);
+    #   p=p*cr2; #p is Q*r1(i)xn(i)xr2(i+1);
+    #   cr1=reshape(cr1,[r1(i)*n(i),numel(cr1)/(r1(i)*n(i))]);
+    #   p=reshape(p,[r1(i)*n(i),numel(p)/(r1(i)*n(i))]);
+    #   p=cr1'*p;
+    # end
+    
+    # If the first indices are not ones
+    p=I(r1[1]*r2[1]);
+    p = reshape(p, r1[1]*r2[1]*r1[1], r2[1]);
+    
+    for i=1:d
+        cr1=core1[ps1[i]:ps1[i+1]-1];
+        cr2=core2[ps2[i]:ps2[i+1]-1];
+        cr2=reshape(cr2,r2[i], n[i]*r2[i+1]);
+        
+        p = p*cr2; # size r11*r21*r1-, n*r2+
+        p = reshape(p,r1[1]*r2[1], r1[i]*n[i], r2[i+1]);
+        p = permutedims(p, [1, 3, 2]);
+        p = reshape(p, r1[1]*r2[1]*r2[i+1], r1[i]*n[i]);
+        
+        cr1=reshape(cr1,r1[i]*n[i], r1[i+1]);
+        
+        p = p*conj(cr1); # size r11*r12*r2+, r1+
+        p = reshape(p, r1[1]*r2[1], r2[i+1], r1[i+1]);
+        p = permutedims(p, [1, 3, 2]);
+        p = reshape(p, r1[1]*r2[1]*r1[i+1], r2[i+1]);
+    end;
+    
+    if (do_qr)
+        r2old = size(rv2, 2);
+        r1old = size(rv1,2);
+        p = p*rv2;
+        p = reshape(p, r1[1]*r2[1], r1[d+1], r2old);
+        p = permutedims(p, [1, 3, 2]);
+        p = reshape(p, r1[1]*r2[1]*r2old, r1[d+1]);
+        p = p*conj(rv1);
+        p = reshape(p, r1[1], r2[1], r2old, r1old);
+        p = permutedims(p, [1,2,4,3]);
+        if ( r1[1]*r2[1] == 1 ) #Save the rabbits
+            p=reshape(p, r1old, r2old);
+        end
+    else
+        p = reshape(p, r1[1], r2[1], r1[d+1], r2[d+1]);
+        if ( r1[1]*r2[1] == 1 ) #Save the rabbits
+            p=reshape(p, r1[d+1], r2[d+1]);
+        end
+    end;
+
+    return only(p)
 end

@@ -1,6 +1,7 @@
 module TT
-import LinearAlgebra, LinearAlgebra.norm
-import Base.size, Base.-, Base.+, Base.*
+import LinearAlgebra
+import LinearAlgebra: norm, dot
+import Base: size, -, +, *
 
 include("TTTensor.jl")
 export TTTensor, qtt_x, tt_ones, rank, ranks, rounded_diagonal_index, size, mem,
