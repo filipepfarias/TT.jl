@@ -1,5 +1,8 @@
 # TT.jl
 
+[![Build Status](https://github.com/filipepfarias/TT.jl/actions/workflows/CI.yml/badge.svg?branch=dev)](https://github.com/filipepfarias/TT.jl/actions/workflows/CI.yml?query=branch%3Adev)
+[![codecov](https://codecov.io/gh/filipepfarias/TT.jl/graph/badge.svg?token=K1MPRAZWDH)](https://codecov.io/gh/filipepfarias/TT.jl)
+
 ### This package is a Julia version of [TT-Toolbox](https://github.com/oseledets/TT-Toolbox) for MATLAB .
 
 ### <span style="color:red">This package is under development!
