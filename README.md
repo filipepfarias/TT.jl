@@ -20,11 +20,24 @@ The following functions are partially implemented and not fully tested. Instabil
   - [x] tt_size
   - [x] norm
   - [x] dot
+  - [x] rounded_diagonal_index (my_chop2)
 
 - [ ] multifuncrs
   - [ ] qr (lr)
   - [ ] sum
   - [ ] tt_rand
-  - [ ] core2cell
+  - [ ] core_to_vector (core2cell)
+  - [ ] vector_to_core (cell2core)
+
+- [ ] tAMEn <5>
+  - [ ] tt_matrix <4>
+  - [ ] grumble_vector <3>
+  - [ ] grumble_matrix <3>
+  - [ ] parse_matrix <2>
+  - [ ] parse_rhs <2>
+  - [ ] amenany_sweepzz <2>
+  - [ ] chebdiff <1>
+  - [ ] cheb2_interpolant
+Complexity to implement and test: <1-5>
 
 - [ ] Documentation (TO-DO)
