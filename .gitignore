@@ -1,2 +1,7 @@
 /Manifest.toml
+<<<<<<< HEAD
 .vscode/settings.json
+=======
+settings.json
+*.cov
+>>>>>>> origin/dev
