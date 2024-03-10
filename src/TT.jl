@@ -5,7 +5,7 @@ import Base: size, -, +, *
 
 include("TTTensor.jl")
 export TTTensor, qtt_x, tt_ones, rank, ranks, rounded_diagonal_index, size, mem,
-tt_ones,+,-,*,norm,core_to_vector, TTrand
+tt_ones,+,-,*,norm,core_to_vector,dot,TTrand
 
 include("solve.jl")
 
