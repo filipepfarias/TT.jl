@@ -32,6 +32,14 @@ The following functions are partially implemented and not fully tested. Instabil
   - [ ] core_to_vector (core2cell)
   - [ ] vector_to_core (cell2core)
 
+- [ ] TTMatrix
+  - [ ] tkron
+  - [ ] mtimes
+  - [ ] plus
+  - [ ] /
+  - [ ] core
+  - [ ] mtimes
+
 - [ ] tAMEn <5>
   - [ ] tt_matrix <4>
   - [ ] grumble_vector <3>
@@ -41,6 +49,10 @@ The following functions are partially implemented and not fully tested. Instabil
   - [ ] amenany_sweepzz <2>
   - [ ] chebdiff <1>
   - [ ] cheb2_interpolant
+  - [ ] compute_next_Phi
+  - [ ] solve3d_2ml
+  - [ ] tic, toc
+
 Complexity to implement and test: <1-5>
 
 - [ ] Documentation (TO-DO)

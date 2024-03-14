@@ -629,7 +629,7 @@ function multifuncrs(X::Vector{TTTensor}, funs, eps, varargin)
     
     if (isempty(y))
         ry = d2*ones(d+1); ry[1]=1;
-        y = TTrand(n, d, ry);
+        y = tt_rand(n, d, ry);
         wasrand = true;
     end;
     ry = y.r;

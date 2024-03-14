@@ -205,7 +205,7 @@ function qtt_x(n::Vector{Int}) ######################## To be moved
     return res
 end
 
-function rounded_diagonal_index(S::Vector,precision::Float64)
+function rounded_diagonal_index(S::Vector{Float64},precision::Float64)
     if (norm(S) == 0) 
         return 1
     end
@@ -254,52 +254,6 @@ function mem(cores::Vector{Array{Number,3}})
 end
 
 mem(A::TTTensor) = prod([ A.n .* A.r[1:A.d]; A.r[2:A.d + 1] ])
-
-"""
-Tensor of all ones
-   [TT]=TT_ONES(N,D), computes the d-dimensional TT-tensor of all ones 
-   with mode size equal to N
-
-   [TT]=TT_ONES(N), computes the TT-tensor of all ones with mode size 
-   given in the vector N
-
-
- TT-Toolbox 2.2, 2009-2012
-
-This is TT Toolbox, written by Ivan Oseledets et al.
-Institute of Numerical Mathematics, Moscow, Russia
-webpage: http://spring.inm.ras.ru/osel
-
-For all questions, bugs and suggestions please mail
-ivan.oseledets@gmail.com
----------------------------
-"""
-function tt_ones(n::Vector{Int})
-    
-    # if (numel(n) == 1)
-    #     if (numel(varargin)>0)
-    #         d=varargin{1}; 
-    #     else
-    #         d=1;
-    #     end;
-    #     if d>0
-    #         n=n*ones(1,d);
-    #     end
-    # else
-    #     d=numel(n);
-    # end
-    d = length(n);
-    # if d>0
-        tt=Vector{Array}(undef,d);
-        for k=1:d
-            tt[k] = ones(n[k]); #sqrt(n);
-        end
-        tt=TTTensor(tt); #Bydlocode @
-    # else
-    #     tt=TTTensor([[1.0]]);
-    # end
-    return tt
-end
 
 
 (-)(A::TTTensor,B::TTTensor) = A+(-1.0)*B;
@@ -566,11 +520,11 @@ function core_to_vector(tt::TTTensor)
     return cc
 end
 
-function vector_to_core(cc::Vector)
+function vector_to_core(tt::TTTensor,cc::Vector)
     d = length(cc);
-    r = zeros(d+1);
-    n = zeros(d);
-    ps = zeros(d+1);
+    r = zeros(Int,d+1);
+    n = zeros(Int,d);
+    ps = zeros(Int,d+1);
     ps[1]=1;
     for i=1:d
         r[i] = size(cc[i],1);
@@ -613,7 +567,7 @@ For all questions, bugs and suggestions please mail
 ivan.oseledets@gmail.com
 ---------------------------
 """
-function TTrand(d::Int,n::Vector{Int},r::Vector{Int},lr::Bool=true)
+function tt_rand(d::Int,n::Vector{Int},r::Vector{Int},lr::Bool=true)
 
     if ( length(n) == 1 ) 
         n = n * ones(d);
@@ -664,4 +618,47 @@ function TTrand(d::Int,n::Vector{Int},r::Vector{Int},lr::Bool=true)
     # tt.ps = ps;
     # tt.core=cr;
     return TTTensor(d,r,n,cr,ps,[0])
+end
+
+"""
+Kronecker product of two TT-tensors, little-endian tensor type
+   [C] = TKRON(A, B) Kronecker product of two TT-tensors, gluing the TT
+   representations of A and B
+   For a MATLAB-compatible ("canonical") function, please use KRON(A, B)
+
+ TT-Toolbox 2.2, 2009-2012
+
+This is TT Toolbox, written by Ivan Oseledets et al.
+Institute of Numerical Mathematics, Moscow, Russia
+webpage: http://spring.inm.ras.ru/osel
+
+For all questions, bugs and suggestions please mail
+ivan.oseledets@gmail.com
+---------------------------
+
+Time to replace it by something meaningful
+"""
+function tkron(tt1::TTTensor, tt2::TTTensor)
+    tt1cr = size(tt1.core,1) == 1 ? tt1.core' : tt1.core
+    tt2cr = size(tt2.core,1) == 1 ? tt2.core' : tt2.core
+
+    d = tt1.d + tt2.d;
+    core = [tt1cr; tt2cr];
+    n = [tt1.n; tt2.n];
+    r = [tt1.r[1:tt1.d]; tt2.r];
+    ps = cumsum([1;n .* r[1:d] .* r[2:d+1]])
+
+    return TTTensor(d,r,n,core,ps,[0])
+end
+
+function tkron(a::Vector{Any},tt2::TTTensor)
+    @assert isempty(a) "`a` must be empty."
+    return tt2
+end
+
+tkron(tt1::TTTensor,a::Vector{Any}) = tkron(a,tt1)
+
+function core(tt1::TTTensor,i::Integer)
+    ttcr = tt1.core[tt1.ps[i]:tt1.ps[i+1]-1];
+    return reshape(ttcr,tt1.r[i],tt1.n[i],tt1.r[i+1])
 end
