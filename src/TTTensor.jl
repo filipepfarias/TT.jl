@@ -1,7 +1,7 @@
 using LinearAlgebra
 using Printf
 
-struct TTTensor
+mutable struct TTTensor
     d::Int                       # dimension of the array
     r::Vector{Int}               # ranks of the decomposition
     n::Vector{Int}               # mode sizes of the array
@@ -84,15 +84,15 @@ function TTTensor(tt::Vector{T}) where {T<:AbstractArray}
         r = tt_ranks(tt)
         r = [1; r; 1]
         n = tt_size(tt)
-        core = zeros(sum(length,tt)); 
-        ps = cumsum([1; n .* r[1:d] .* r[2:d+1]]);
+        core = zeros(sum(length, tt))
+        ps = cumsum([1; n .* r[1:d] .* r[2:d+1]])
         core[ps[1]:ps[2]-1] = tt[1]
         for i = 2:d-1
             cr = tt[i]
             cr = permutedims(cr, [2, 1, 3])
             core[ps[i]:ps[i+1]-1] = cr[:]
         end
-        cr = tt[d]; 
+        cr = tt[d]
         cr = permutedims(cr, [2, 1])
         core[ps[d]:ps[d+1]-1] = cr[:]
         return TTTensor(d, r, n, core, ps, [0])
@@ -128,22 +128,22 @@ function TTTensor(tt::Vector{T}) where {T<:AbstractArray}
 end
 
 
-function vector_to_core(::Type{TTTensor},tt::Vector{T}) where {T<:AbstractArray}
+function vector_to_core(::Type{TTTensor}, tt::Vector{T}) where {T<:AbstractArray}
     d = length(tt)
     r = zeros(Int, d + 1)
     n = zeros(Int, d)
     ps = zeros(Int, d + 1)
-    cr = Vector{Array}(undef,d)
+    cr = Vector{Array}(undef, d)
     ps[1] = 1
     for i = 1:d
         r[i] = size(tt[i], 1)
         n[i] = size(tt[i], 2)
         r[i+1] = size(tt[i], 3)
-        cr[i] = reshape(tt[i], r[i] * n[i] * r[i+1]); 
+        cr[i] = reshape(tt[i], r[i] * n[i] * r[i+1])
         ps[i+1] = ps[i] + r[i] * n[i] * r[i+1]
     end
-    cr = reduce(vcat, cr[:]);
-    return TTTensor(d, r, n , cr, ps, [0])
+    cr = reduce(vcat, cr[:])
+    return TTTensor(d, r, n, cr, ps, [0])
 end
 
 function rounded_diagonal_index(S::Vector{Float64}, precision::Float64)
@@ -613,4 +613,170 @@ function core(tt1::TTTensor, i::Integer)
     return reshape(ttcr, tt1.r[i], tt1.n[i], tt1.r[i+1])
 end
 
-getindex(tt::TTTensor, i::Int)= core(tt, i)
+getindex(tt::TTTensor, i::Int) = core(tt, i)
+
+function setindex!(t::TTTensor, x::T, i::Int64) where {T<:AbstractArray}
+    # Insert one core (r1-n-r2!!!!!! not n-r1-r2!) into the TT2
+    r1 = size(x, 1)
+    n1 = size(x, 2)
+    r2 = size(x, 3)
+    # i = s.subs{1};
+    #          if (i==1)
+    #              r2 = r1;
+    #              r1 = 1;
+    #          end;
+    n = t.n
+    d = t.d
+    r = t.r
+    cr = t.core
+    ps = t.ps
+    # Update the positions of the untouched cores
+    psnew = ps
+    psnew[i+1:end] = ps[i+1:end] .- (ps[i+1] - ps[i]) .+ n1 * r1 * r2
+    cr[psnew[i+1]:psnew[d+1]-1] = cr[ps[i+1]:ps[d+1]-1]
+    #          if (i~=1)
+    #              b = permute(b, [2, 1, 3]); # We have r1,n1,r2 in the new format
+    #          end;
+    # Update the current core
+    cr[psnew[i]:psnew[i+1]-1] = x[:]
+    cr = cr[1:psnew[d+1]-1]
+    # Stuff evrthg back
+    n[i] = n1
+    r[i] = r1
+    r[i+1] = r2
+    t.n = n
+    t.r = r
+    t.core = cr
+    t.ps = psnew
+end
+
+
+"""
+%Approximate TT-tensor with another one with specified accuracy
+%   [TT]=ROUND(TT,EPS,RMAX) Approximate TT-tensor with relative accuracy 
+%   EPS and maximal rank RMAX. RMAX can be array of ranks or a number
+%
+%
+% TT-Toolbox 2.2, 2009-2012
+%
+%This is TT Toolbox, written by Ivan Oseledets et al.
+%Institute of Numerical Mathematics, Moscow, Russia
+%webpage: http://spring.inm.ras.ru/osel
+%
+%For all questions, bugs and suggestions please mail
+%ivan.oseledets@gmail.com
+%---------------------------
+"""
+function round(tt::TTTensor, eps::Float64, rmax::Vector{Int})
+    d = tt.d
+    n = tt.n
+    r = tt.r
+    if (sum(length, rmax) == 1)
+        rmax = rmax .* ones(Int, d + 1)
+    end
+    pos = tt.ps
+    cr = tt.core
+    pos1 = 1
+    nrm = zeros(d)
+    core0 = cr[1:r[1]*n[1]*r[2]]
+    # Orthogonalization from left-to-tight
+    for i = 1:d-1
+        core0 = reshape(core0, r[i] * n[i], r[i+1])
+        core0, ru = qr(core0); core0 = Array(core0);
+        nrm[i+1] = norm(ru)
+        if (nrm[i+1] != 0)
+            ru = ru ./ nrm[i+1]
+        end
+        core1 = cr[pos[i+1]:pos[i+2]-1]
+        core1 = reshape(core1, r[i+1], n[i+1] * r[i+2])
+        core1 = ru * core1
+        r[i+1] = size(core0, 2);
+        cr[pos1:pos1-1+r[i]*n[i]*r[i+1]] = core0[:];
+        cr[pos1+r[i]*n[i]*r[i+1]:pos1+r[i]*n[i]*r[i+1]+r[i+1]*n[i+1]*r[i+2]-1] = core1[:]
+        core0 = core1
+        pos1 = pos1 + r[i] * n[i] * r[i+1]
+    end
+    pos1 = pos1 + r[d] * n[d] * r[d + 1] - 1
+    cr = cr[1:pos1] # Truncate storage if required
+    ep = eps / sqrt(d - 1)
+    pos = cumsum([1; n .* r[1:d] .* r[2:d+1]])
+    core0 = cr[pos1-r[d]*n[d]*r[d + 1]+1:pos1]
+    for i = d:-1:2
+        core1 = cr[pos[i-1]:pos[i]-1]
+        core0 = reshape(core0, r[i], n[i] * r[i+1])
+        core1 = reshape(core1, r[i-1] * n[i-1], r[i])
+
+        #  try
+        u, s, v = svd(core0)
+        #  catch err
+        #    if (strcmp(err.identifier,'MATLAB:svd:svdNoConvergence'))
+        #      #  When svd doesn't converge, svds usually works fine (but much slower).
+        #      warning('SVD did not converge, switched to svds.');
+        #      [u,s,v]=svds(core0, min(size(core0)));
+        #    else
+        #      rethrow(err);
+        #    end
+        #  end
+
+        #  s=diag(s);
+        r1 = rounded_diagonal_index(s, norm(s) * ep)
+        r1 = min(r1, rmax[i])
+
+        u = u[:, 1:r1]
+        s = s[1:r1]
+        v = v[:, 1:r1]
+        u = u * diagm(s)
+        r[i] = r1
+        core1 = core1 * u
+        core0 = v'
+        cr[pos1-r[i]*n[i]*r[i+1]+1:pos1] = core0[:]
+        cr[pos1-r[i]*n[i]*r[i+1]-r[i-1]*n[i-1]*r[i]+1:pos1-r[i]*n[i]*r[i+1]] = core1[:]
+        pos1 = pos1 - r[i] * n[i] * r[i+1]
+        core0 = core1
+    end
+    pos1 = pos1 - r[1] * n[1] * r[2]
+    cr = cr[pos1+1:sum(length, cr)] # Truncate unwanted elements;
+    tt.r = r
+    tt.ps = cumsum([1; tt.n .* tt.r[1:d] .* tt.r[2:d+1]])
+    pp = cr[1:r[1]*n[1]*r[2]]
+    nrm[1] = norm(pp)
+    if (nrm[1] != 0)
+        pp = pp ./ nrm[1]
+    end
+    cr[1:r[1]*n[1]*r[2]] = pp
+    # Now a simple trick: balance the product of numbers;
+    # All cores are orthogonal except the first one. Thus, we know the norm
+    nrm0 = sum(log.(abs.(nrm)))
+    nrm0 = nrm0 / d
+    nrm0 = exp(nrm0)
+    ps = tt.ps
+    for i = 1:d
+        cr[ps[i]:ps[i+1]-1] = nrm0 * cr[ps[i]:ps[i+1]-1]
+    end
+    tt.core = cr
+    tt.over = [0]
+    return tt
+end
+
+"""
+%Approximate TT-tensor with another one with specified accuracy
+%   [TT]=ROUND(TT,EPS) Approximate TT-tensor with relative accuracy EPS
+%
+%   EPS and maximal rank RMAX. RMAX can be array of ranks or a number
+%
+%
+% TT-Toolbox 2.2, 2009-2012
+%
+%This is TT Toolbox, written by Ivan Oseledets et al.
+%Institute of Numerical Mathematics, Moscow, Russia
+%webpage: http://spring.inm.ras.ru/osel
+%
+%For all questions, bugs and suggestions please mail
+%ivan.oseledets@gmail.com
+%---------------------------
+"""
+function round(tt::TTTensor, eps::Float64)
+    return round(tt, eps, [prod(size(tt))])
+end
+
+

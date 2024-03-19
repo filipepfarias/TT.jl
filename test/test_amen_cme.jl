@@ -99,7 +99,7 @@ B = tkron(tt_I,tt_eye(2 .* ones(Int,Lt))) - tkron(A,iGt*Mt);
 # Initial state
 u = [];
 for i=1:d
-    u = tkron(u, tt_unit(factor(n(i))', numel(factor(n(i))), 1)); #QTT
+    u = tkron(u, tt_unit(factor(Vector,n[i]), 1)); #QTT
 end;
 U0 = tkron(u,et);
 
