@@ -59,21 +59,24 @@ Ad[d][1,:,:] = I(n[d]);
 Ad[d][2,:,:] = (diagm(1 => ones(n[d]-1))-I(n[d]))*diagm((0:n[d]-1))*0.07;
 
 # QTT-tize each dimension separately, it is more stable due to smaller size
-Apq = [];
+begin
+    Apq = [];
 Adq = [];
+Aloc = []
 for i=1:d
     r1 = size(Ap[i],1);
     r2 = size(Ap[i],4);
-    Aloc = TTMatrix([Ap[i]]);
-    Aloc = tt_reshape(Aloc, factor(Vector,n[i]).*[1 1], 1e-13, r1, r2);
+    Aloc = vector_to_core(TTMatrix,[Ap[i]]); 
+    Aloc = reshape(Aloc, factor(Vector,n[i]).*[1 1], 1e-13, r1, r2); 
     Apq = tkron(Apq, Aloc);
     
     r1 = size(Ad[i],1);
     r2 = size(Ad[i],4);
-    Aloc = TTMatrix([Ad[i]]);
-    Aloc = tt_reshape(Aloc, factor(Vector,n[i]).*[1 1], 1e-13, r1, r2);
+    Aloc = vector_to_core(TTMatrix,[Ad[i]]);
+    Aloc = reshape(Aloc, factor(Vector,n[i]).*[1 1], 1e-13, r1, r2);
     Adq = tkron(Adq, Aloc);
-end;
+end
+end
 
 # Now the final CME operator
 A = Apq+Adq;
@@ -83,11 +86,11 @@ tt_I = tt_eye(A.n);
 # Global time scheme
 tau = T/2^Lt;
 Gt = IpaS(Lt,-1)/tau;
-iGt = tt_qtoepl(tkron(tt_ones(2,Lt), tt_tensor([0;1])), Lt)*tau;
-Mt = tt_eye(2,Lt);
-e1t = tt_unit(2,Lt,1);
-et = tt_ones(2,Lt);
-eNt = tt_unit(2,Lt,2^Lt);
+iGt = tt_qtoepl(tkron(tt_ones(2 .* ones(Int,Lt)), TTTensor([0;1])), Lt)*tau;
+Mt = tt_eye(2 .* ones(Int,Lt));
+e1t = tt_unit(2 .* ones(Int,Lt),1);
+et = tt_ones(2 .* ones(Int,Lt));
+eNt = tt_unit(2 .* ones(Int,Lt),2^Lt);
 
 # Global matrix
 B = tkron(I,tt_eye(2,Lt)) - tkron(A,iGt*Mt);
