@@ -129,6 +129,8 @@ end
 
 (+)(tt1::TTMatrix, a::Vector{Any}) = (+)(a, tt1)
 
+(-)(A::TTMatrix,B::TTMatrix) = A+(-1.0*B);
+
 (/)(tt1::TTMatrix, a::Number) = tt1 * (1 / a);
 
 function (*)(A::TTMatrix, B::TTMatrix)
