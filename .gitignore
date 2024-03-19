@@ -1,8 +1,4 @@
 /Manifest.toml
-<<<<<<< HEAD
-.vscode/settings.json
-=======
 settings.json
 *.cov
->>>>>>> origin/dev
-src/TT.jl.code-workspace
+*.code-workspace
