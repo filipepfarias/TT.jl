@@ -93,7 +93,7 @@ et = tt_ones(2 .* ones(Int,Lt));
 eNt = tt_unit(2 .* ones(Int,Lt),2^Lt);
 
 # Global matrix
-B = tkron(I,tt_eye(2,Lt)) - tkron(A,iGt*Mt);
+B = tkron(tt_I,tt_eye(2 .* ones(Int,Lt))) - tkron(A,iGt*Mt);
 
 
 # Initial state
