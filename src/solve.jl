@@ -1,3 +1,5 @@
+using IterativeSolvers, LinearMaps
+
 """
 Solution of linear systems in TT-format via DMRG iteration
    [X,testdata,z]=AMEN_SOLVE2(A,Y,TOL,OPTIONS) Attempts to solve the linear
@@ -85,7 +87,7 @@ function amen_solve2(A, y, tol;
     tol_exit=[],
     symm=false)
 
-    # if (~isempty(varargin))
+    # if (!isempty(varargin))
     #     v1 = varargin{1};
     #     if (isa(v1, 'cell'))
     #         varargin=v1;
@@ -140,47 +142,47 @@ function amen_solve2(A, y, tol;
     # global amengl_local_iters
     # global amengl_local_prec
 
-    # if (~isempty(amengl_tol)) && (isempty(tol))
+    # if (!isempty(amengl_tol)) && (isempty(tol))
     #     tol = amengl_tol
     # end
-    # if (~isempty(amengl_tol_exit))
+    # if (!isempty(amengl_tol_exit))
     #     tol_exit = amengl_tol_exit
     # end
-    # if (~isempty(amengl_nswp))
+    # if (!isempty(amengl_nswp))
     #     nswp = amengl_nswp
     # end
-    # if (~isempty(amengl_resid_damp))
+    # if (!isempty(amengl_resid_damp))
     #     resid_damp = amengl_resid_damp
     # end
-    # if (~isempty(amengl_max_full_size))
+    # if (!isempty(amengl_max_full_size))
     #     max_full_size = amengl_max_full_size
     # end
-    # if (~isempty(amengl_trunc_norm))
+    # if (!isempty(amengl_trunc_norm))
     #     trunc_norm = amengl_trunc_norm
     # end
-    # if (~isempty(amengl_verb))
+    # if (!isempty(amengl_verb))
     #     verb = amengl_verb
     # end
-    # if (~isempty(amengl_plusrank))
+    # if (!isempty(amengl_plusrank))
     #     kickrank = amengl_plusrank
     # end
-    # if (~isempty(amengl_local_restart))
+    # if (!isempty(amengl_local_restart))
     #     local_restart = amengl_local_restart
     # end
-    # if (~isempty(amengl_local_iters))
+    # if (!isempty(amengl_local_iters))
     #     local_iters = amengl_local_iters
     # end
-    # if (~isempty(amengl_local_prec))
+    # if (!isempty(amengl_local_prec))
     #     local_prec = amengl_local_prec
     # end
 
-    # if (isempty(tol_exit))
-    #     tol_exit = tol
-    # end
+    if (isempty(tol_exit))
+        tol_exit = tol
+    end
 
     # obs = []
     # for i=1:2:length(varargin)-1
-    #     switch lower(varargin{i})
+    #     switch lower(varargin[i])
     #         case 'nswp'
     #             nswp=varargin{i+1};
     #         case 'rmax'
@@ -219,7 +221,7 @@ function amen_solve2(A, y, tol;
     #             symm = varargin{i+1};
 
     #         otherwise
-    #             error('Unrecognized option: %s\n',varargin{i});
+    #             error('Unrecognized option: %s\n',varargin[i]);
     #     end
     # end
 
@@ -237,45 +239,47 @@ function amen_solve2(A, y, tol;
     # # Disable MEX if it does not exist
     # if (ismex)&&(exist("solve3d_2", "file")<2)
     #     warning("MEX local solver is not found, disabled");
-    #     ismex = false;
+    ismex = false
     # end;
 
     if (A.n != A.m)
         error(" AMEn does not know how to solve rectangular systems!\n Use amen_solve2(A'*A, A'*f, tol) instead.")
     end
 
-    x=x0;
-    crz=z0;
+
+    x = x0
+    crz = z0
 
     d = y.d
     n = A.n
-    if (isempty(x))
-        x = tt_rand(n, A.d, 2, false) #RL orthogonal
+    if (x isa Array ? isempty(x) : false)
+        x = tt_ones(n .* ones(Int,A.tt.d)) #RL orthogonal
+        # x = tt_rand(A.tt.d, n, [2], false) #RL orthogonal
     end
 
     rx = x.r
     crx = core_to_vector(x)
 
     if (symm)
-        ra = A.r
+        ra = A.tt.r
         ry = (y.r) .* ra
         ra = ra .^ 2
         cry = core_to_vector(A' * y)
         crA = core_to_vector(A' * A)
     else
         ry = y.r
-        ra = A.r
+        ra = A.tt.r
         cry = core_to_vector(y)
         crA = core_to_vector(A)
     end
 
     # Partial projections X'AX and X'Y
     phia = Vector{Array}(undef, d + 1)
-    phia[1] = [1]
-    phia[d+1] = [1]
+    phia[1] = ones(1, 1, 1)
+    phia[d+1] = ones(1, 1, 1)
     phiy = Vector{Array}(undef, d + 1)
-    phiy[1] = [1]
-    phiy[d+1] = [1]
+    phiy[1] = ones(1, 1, 1)
+    phiy[d+1] = ones(1, 1, 1)
     # Try to compute the low-rank appr. to residual on-the-fly
     if (kicktype == "als") & (kickrank + kickrank2 > 0)
         # Partial projections Z'AX, Z'Y
@@ -286,7 +290,7 @@ function amen_solve2(A, y, tol;
         phizy[1] = [1]
         phizy[d+1] = [1]
         if (isempty(crz))
-            crz = tt_rand(n, d, kickrank + kickrank2, false)
+            crz = tt_rand(d, n, [kickrank + kickrank2], false)
         end
         rz = crz.r
         crz = core_to_vector(crz)
@@ -317,9 +321,9 @@ function amen_solve2(A, y, tol;
 
 
     # Norm extractors
-    nrmsa = ones(d - 1, 1)
-    nrmsy = ones(d - 1, 1)
-    nrmsx = ones(d - 1, 1)
+    nrmsa = ones(Float64, d - 1)
+    nrmsy = ones(Float64, d - 1)
+    nrmsx = ones(Float64, d - 1)
     # We will need to correct y by |y|/(|A||x|).
     # # Store the logarithms of norms in nrmsc
     nrmsc = 1
@@ -344,24 +348,26 @@ function amen_solve2(A, y, tol;
                     # Update crz (we don't want just random-svd)
                     crzAt = bfun3(phiza[i], crA[i], phiza[i+1], reshape(crx[i], rx[i] * n[i] * rx[i+1], 1))
                     crzAt = reshape(crzAt, rz[i] * n[i], rz[i+1])
-                    crzy = phizy[i] * reshape(cry[i], ry[i], n[i] * ry[i+1])
+                    phizyi = ndims(phizy[i]) > 2 ? dropdims(phizy[i], dims=3) : phizy[i]
+                    crzy = phizyi * reshape(cry[i], ry[i], n[i] * ry[i+1])
                     crzy = reshape(crzy, rz[i] * n[i], ry[i+1])
-                    crzy = crzy * phizy[i+1]
+                    phizyi = ndims(phizy[i+1]) > 2 ? dropdims(phizy[i+1], dims=3) : phizy[i+1]
+                    crzy = crzy * phizyi
                     crznew = crzy * nrmsc - crzAt
                     crznew = reshape(crznew, rz[i], n[i] * rz[i+1])
                     vz, sz, crznew = svd(crznew)
-                    crznew = conj(crznew(:, 1:min(kickrank, size(crznew, 2))))
+                    crznew = conj(crznew[:, 1:min(kickrank, size(crznew, 2))])
                     if (i < d)
-                        crznew = [crznew, randn(n[i] * rz[i+1], kickrank2)]
+                        crznew = [crznew randn(n[i] * rz[i+1], kickrank2)]
                     end
                 else
                     crznew = reshape(crz[i], rz[i], n[i] * rz[i+1])'
                 end
 
-                crznew, rv = qr(crznew)
+                crznew, rv = qr(crznew); crznew = Array(crznew)
                 rznew = size(crznew, 2)
                 crznew = reshape(crznew', rznew, n[i], rz[i+1])
-                crz[i] = crznew
+                crz[i] = crznew;
             end
             if (swp > 1)
                 # Remove old norm correction
@@ -381,6 +387,7 @@ function amen_solve2(A, y, tol;
                 cr = [cr, crobs]
             end
             cr, rv = qr(cr)
+            cr = Array(cr)
             if (!isempty(obs))
                 phiobs = rv[:, rx[i]+1:rx[i]+robs[i]]
                 rv = rv[:, 1:rx[i]]
@@ -400,10 +407,10 @@ function amen_solve2(A, y, tol;
             rx[i] = size(cr, 2)
             cr = reshape(cr', rx[i], n[i], rx[i+1])
             crx[i-1] = reshape(cr2, rx[i-1], n[i-1], rx[i])
-            crx{i} = cr
+            crx[i] = cr
 
-            phia[i], nrmsa[i-1] = compute_next_Phi(phia[i+1], cr, crA[i], cr, false)
-            phiy[i], nrmsy[i-1] = compute_next_Phi(phiy[i+1], cr, [], cry[i], false)
+            phia[i], nrmsa[i-1] = compute_next_Phi_normed(phia[i+1], cr, crA[i], cr, false)
+            phiy[i], nrmsy[i-1] = compute_next_Phi_normed(phiy[i+1], cr, [], cry[i], false)
             if ((!isreal(phia[i])) || (!isreal(phiy[i]))) && (ismex)
                 warning("Complex data detected, turning MEX local solver off")
                 ismex = false
@@ -416,11 +423,11 @@ function amen_solve2(A, y, tol;
             if (kicktype == "svd") && (kickrank > 0) && (!last_sweep)
                 # We need to assemble the core [Y^k & A^k X^k] and orthogonalize
                 # it.
-                A1 = reshape(permute(crA[i], [1, 2, 4, 3]), ra[i] * n[i] * ra[i+1], n[i])
-                x1 = reshape(permute(crx[i], [2, 1, 3]), n[i], rx[i] * rx[i+1])
+                A1 = reshape(permutedims(crA[i], [1, 2, 4, 3]), ra[i] * n[i] * ra[i+1], n[i])
+                x1 = reshape(permutedims(crx[i], [2, 1, 3]), n[i], rx[i] * rx[i+1])
                 Ax1 = A1 * x1
                 Ax1 = reshape(Ax1, ra[i], n[i], ra[i+1], rx[i], rx[i+1])
-                Ax1 = permute(Ax1, [1, 4, 2, 3, 5])
+                Ax1 = permutedims(Ax1, [1, 4, 2, 3, 5])
                 Ax1 = reshape(Ax1, ra[i] * rx[i], n[i], ra[i+1] * rx[i+1])
                 r1 = ra[i] * rx[i] + ry[i]
                 r2 = ra[i+1] * rx[i+1] + ry[i+1]
@@ -430,9 +437,9 @@ function amen_solve2(A, y, tol;
                 res1 = zeros(r1, n[i], r2)
                 res1[1:ra[i]*rx[i], :, 1:ra[i+1]*rx[i+1]] = Ax1
                 if (i == d)
-                    res1[ra[i]*rx[i]+1:r1, :, 1] = cry{i}
+                    res1[ra[i]*rx[i]+1:r1, :, 1] = cry[i]
                 else
-                    res1[ra[i]*rx[i]+1:r1, :, ra[i+1]*rx[i+1]+1:r2] = cry{i}
+                    res1[ra[i]*rx[i]+1:r1, :, ra[i+1]*rx[i+1]+1:r2] = cry[i]
                 end
                 res1 = reshape(res1, r1 * n[i], r2)
                 res2 = res1 * Rs[i+1]
@@ -462,7 +469,7 @@ function amen_solve2(A, y, tol;
                 Rs[3, i] = Rs[3, i]'
                 Rs[3, i] = reshape(Rs[3, i], n[i] * ra[i+1], rx[i+1] * rx[i] * ra[i])
                 # Now, not Ak, but Ak'
-                A1 = permute(crA[i], [1, 3, 2, 4])
+                A1 = permutedims(crA[i], [1, 3, 2, 4])
                 A1 = conj(reshape(A1, ra[i] * n[i], n[i] * ra[i+1]))
                 Rs[3, i] = A1 * Rs[3, i]
                 Rs[3, i] = reshape(Rs[3, i], ra[i], n[i] * rx[i+1] * rx[i] * ra[i])
@@ -499,13 +506,13 @@ function amen_solve2(A, y, tol;
             y1 = y1 * nrmsc
 
             # RHS - rewrite it in accordance with new index ordering
-            rhs = phiy[i] # rx'1, ry1
+            rhs = ndims(phiy[i]) > 2 ? dropdims(phiy[i], dims=3) : phiy[i] # rx'1, ry1
             y1 = reshape(y1, ry[i], n[i] * ry[i+1])
             rhs = rhs * y1
             rhs = reshape(rhs, rx[i] * n[i], ry[i+1])
-            rhs = rhs * phiy[i+1]
-            rhs = reshape(rhs, rx[i] * n[i] * rx[i+1], 1)
-            norm_rhs = norm(rhs)
+            rhs *= ndims(phiy[i+1]) > 2 ? dropdims(phiy[i+1], dims=3) : phiy[i+1]
+            rhs = reshape(rhs, rx[i] * n[i] * rx[i+1], 1); 
+            norm_rhs = opnorm(rhs)
 
             # We need slightly better accuracy for the solution, since otherwise
             # the truncation will catch the noise and report the full rank
@@ -515,7 +522,7 @@ function amen_solve2(A, y, tol;
                 #      |     |    |
                 # B = Phi1 - A1 - Phi2
                 #      |     |    |
-                B = reshape(Phi1, rx[i] * rx[i], ra[i])
+                B = reshape(Phi1, rx[i] * rx[i], ra[i]); 
                 B = B * reshape(A1, ra[i], n[i] * n[i] * ra[i+1])
                 B = reshape(B, rx[i], rx[i], n[i], n[i] * ra[i+1])
                 B = permutedims(B, [1, 3, 2, 4])
@@ -525,12 +532,12 @@ function amen_solve2(A, y, tol;
                 B = permutedims(B, [1, 3, 2, 4])
                 B = reshape(B, rx[i] * n[i] * rx[i+1], rx[i] * n[i] * rx[i+1])
 
-                res_prev = norm(B * sol_prev - rhs) / norm_rhs
+                res_prev = opnorm(B * sol_prev - rhs) / norm_rhs; 
 
                 #             if (res_prev>real_tol)
                 #                 sol = pinv(B)*rhs;
                 sol = B \ rhs
-                res_new = norm(B * sol - rhs) / norm_rhs
+                res_new = opnorm(B * sol - rhs) / norm_rhs
                 #             else
                 #                 sol = sol_prev;
                 #                 res_new = res_prev;
@@ -538,16 +545,16 @@ function amen_solve2(A, y, tol;
 
             else # Structured solution.
 
-                res_prev = norm(bfun3(Phi1, A1, Phi2, sol_prev) - rhs) / norm_rhs
+                res_prev = opnorm(bfun3(Phi1, A1, Phi2, sol_prev) - rhs) / norm_rhs
 
                 if (norm_rhs > 0)
-                    if (~ismex)
+                    # if (!ismex)
                         sol = solve3d_2ml(Phi1, A1, Phi2, rhs, real_tol * norm_rhs, sol_prev, local_prec_char, local_restart, local_iters)
-                    else # use MEX
-                        sol = solve3d_2(Phi1, A1, Phi2, rhs, real_tol, trunc_norm_char, sol_prev, local_prec_char, local_restart, local_iters, 0)
-                    end
+                    # else # use MEX
+                        # sol = solve3d_2(Phi1, A1, Phi2, rhs, real_tol, trunc_norm_char, sol_prev, local_prec_char, local_restart, local_iters, 0)
+                    # end
 
-                    res_new = norm(bfun3(Phi1, A1, Phi2, sol) - rhs) / norm_rhs
+                    res_new = opnorm(bfun3(Phi1, A1, Phi2, sol) - rhs) / norm_rhs
                 else
                     sol = zeros(numel(sol_prev), 1)
                     res_new = 0
@@ -556,13 +563,13 @@ function amen_solve2(A, y, tol;
             end
 
             if (res_prev / res_new < resid_damp) && (res_new > real_tol)
-                fprintf("--warn-- the residual damp was smaller than in the truncation\n")
+                @warn "The residual damp was smaller than in the truncation\n"
                 # Bas things may happen. We are to introduce an error definetly
                 # larger than the improvement by the local solution. Usually it
                 # means that a preconditioner is needed.
             end
 
-            dx = norm(sol - sol_prev) / norm(sol)
+            dx = opnorm(sol - sol_prev) / opnorm(sol)
             max_dx = max(max_dx, dx)
             max_res = max(max_res, res_prev)
 
@@ -578,21 +585,22 @@ function amen_solve2(A, y, tol;
             if (kickrank >= 0) && (i < d)
                 u, s, v = svd(sol)
                 # s = diag(s)
-
+                r = 0;
                 if (trunc_norm == "fro") # We are happy with L2 truncation (when? but let it be)
-                    r = my_chop2(s, real_tol * resid_damp * norm(s))
+                    r_ = rounded_diagonal_index(s, real_tol * resid_damp * opnorm(s))
                 else
-                    for r = (min(rx[i] * n[i], rx[i+1])-1):-1:1
-                        cursol = u[:, 1:r] * s[1:r, 1:r] * v[:, 1:r]'
+                    for r_ = (min(rx[i] * n[i], rx[i+1])-1):-1:1
+                        cursol = u[:, 1:r_] * diagm(s[1:r_]) * v[:, 1:r_]'
                         if (rx[i] * n[i] * rx[i+1] < max_full_size)
                             cursol = cursol[:]
-                            res = norm(B * cursol[:] - rhs) / norm_rhs
+                            res = opnorm(B * cursol[:] - rhs) / norm_rhs
                         else
-                            res = norm(bfun3(Phi1, A1, Phi2, cursol) - rhs) / norm_rhs
+                            res = opnorm(bfun3(Phi1, A1, Phi2, cursol) - rhs) / norm_rhs
                         end
                         if (res > max(real_tol * resid_damp, res_new))
                             break
                         end
+                        r = r_
                     end
                     r = r + 1
                     #                 # check the residual trunc
@@ -641,28 +649,35 @@ function amen_solve2(A, y, tol;
 
             else # we don't want the truncation
                 u, v = qr(sol)
+                u = Array(u)
                 v = v'
                 r = size(u, 2)
-                s = ones(r, 1)
+                s = ones(r)
             end
 
             u = u[:, 1:r]
-            v = conj(v[:, 1:r]) * s[1:r]
+            v = conj(v[:, 1:r]) * diagm(s[1:r])
             if (kicktype == "als") && (kickrank + kickrank2 > 0) && (!last_sweep)
                 # Update crz (we don't want just random-svd)
+                # phizai = ndims(phiza[i]) > 2 ? dropdims(phiza[i],dims=3) : phiza[i]
+                # phizai2 = ndims(phiza[i+1]) > 2 ? dropdims(phiza[i+1],dims=3) : phiza[i+1]
                 crzAt = bfun3(phiza[i], A1, phiza[i+1], u * v')
+                # crzAt = bfun3(phizai, A1, phizai2, u * v')
                 crzAt = reshape(crzAt, rz[i] * n[i], rz[i+1])
-                crzy = phizy[i] * y1
+                phizyi = ndims(phizy[i]) > 2 ? dropdims(phizy[i], dims=3) : phizy[i]
+                crzy = phizyi * y1
                 crzy = reshape(crzy, rz[i] * n[i], ry[i+1])
-                crzy = crzy * phizy[i+1]
+                phizyi = ndims(phizy[i+1]) > 2 ? dropdims(phizy[i+1], dims=3) : phizy[i+1]
+                crzy = crzy * phizyi
                 crznew = crzy - crzAt
                 crznew, sz, vz = svd(crznew)
                 crznew = crznew[:, 1:min(kickrank, size(crznew, 2))]
                 if (i < d)
-                    crznew = [crznew, randn(rz[i] * n[i], kickrank2)]
+                    crznew = [crznew randn(rz[i] * n[i], kickrank2)]
                 end
 
                 crznew, rv = qr(crznew)
+                crznew = Array(crznew)
                 rznew = size(crznew, 2)
                 crznew = reshape(crznew, rz[i], n[i], rznew)
                 crz[i] = crznew
@@ -671,20 +686,21 @@ function amen_solve2(A, y, tol;
             if (i < d) #  enrichment, etc
                 if (kickrank > 0) && (!last_sweep)
                     # Smarter kick: low-rank PCA in residual
-                    # Matrix: Phi1-A{i}, rhs: Phi1-y{i}, sizes rx[i]*n - ra(i+1)
+                    # Matrix: Phi1-A[i], rhs: Phi1-y[i], sizes rx[i]*n - ra(i+1)
                     if (kicktype == "svd")
                         leftresid = reshape(Phi1, rx[i] * rx[i], ra[i])
                         leftresid = leftresid'
                         leftresid = reshape(leftresid, ra[i] * rx[i], rx[i])
                         leftresid = leftresid * reshape(u * v', rx[i], n[i] * rx[i+1])
                         leftresid = reshape(leftresid, ra[i], rx[i], n[i], rx[i+1])
-                        leftresid = permute(leftresid, [1, 3, 2, 4])
+                        leftresid = permutedims(leftresid, [1, 3, 2, 4])
                         leftresid = reshape(leftresid, ra[i] * n[i], rx[i] * rx[i+1])
-                        leftresid = reshape(permute(A1, [2, 4, 1, 3]), n[i] * ra[i+1], ra[i] * n[i]) * leftresid
+                        leftresid = reshape(permutedims(A1, [2, 4, 1, 3]), n[i] * ra[i+1], ra[i] * n[i]) * leftresid
                         leftresid = reshape(leftresid, n[i], ra[i+1], rx[i], rx[i+1])
-                        leftresid = permute(leftresid, [3, 1, 2, 4])
+                        leftresid = permutedims(leftresid, [3, 1, 2, 4])
                         leftresid = reshape(leftresid, rx[i] * n[i], ra[i+1] * rx[i+1])
-                        lefty = phiy[i] * y1
+                        phiyi = ndims(phiy[i]) > 2 ? dropdims(phiy[i], dims=3) : phiy[i]
+                        lefty = phiyi * y1
                         lefty = reshape(lefty, rx[i] * n[i], ry[i+1])
 
                         leftresid = [leftresid, -lefty] * Rs[i+1]
@@ -702,7 +718,8 @@ function amen_solve2(A, y, tol;
                         leftresid = reshape(leftresid, n[i], ra[i+1], rx[i], rx[i+1])
                         leftresid = permutedims(leftresid, [3, 1, 2, 4])
                         leftresid = reshape(leftresid, rx[i] * n[i], ra[i+1] * rx[i+1])
-                        lefty = phiy[i] * y1
+                        phiyi = ndims(phiy[i]) > 2 ? dropdims(phiy[i], dims=3) : phiy[i]
+                        lefty = phiyi * y1
                         lefty = reshape(lefty, rx[i] * n[i], ry[i+1])
 
                         leftresid1 = reshape(leftresid, rx[i] * n[i], ra[i+1], rx[i+1])
@@ -747,9 +764,10 @@ function amen_solve2(A, y, tol;
                         # Phi2: rx2, ra2, rz'2, or ry2, rz'2
                         # leftresid: m, ra*rx, lefty: m, ry
                         # Enrichment in X
-                        leftresid = bfun3(Phi1, A1, phiza{i + 1}, u * v')
+                        leftresid = bfun3(Phi1, A1, phiza[i+1], u * v')
                         leftresid = reshape(leftresid, rx[i] * n[i], rz[i+1])
-                        lefty = phiy[i] * y1
+                        phiyi = ndims(phiy[i]) > 2 ? dropdims(phiy[i], dims=3) : phiy[i]
+                        lefty = phiyi * y1
                         lefty = reshape(lefty, rx[i] * n[i], ry[i+1])
                         lefty = lefty * phizy[i+1] # m, rz - OK
                         uk = lefty - leftresid
@@ -758,19 +776,21 @@ function amen_solve2(A, y, tol;
                     end
 
                     # enrichment itself, and orthogonalization
-                    u, rv = qr([u, uk])
+                    u, rv = qr([u uk])
+                    u = Array(u)
                     radd = size(uk, 2)
-                    v = [v, zeros(rx[i+1], radd)]
+                    v = [v zeros(rx[i+1], radd)]
                     v = v * (rv')
                 end
                 r = size(u, 2)
                 # Add a linear functional to the frame
                 if (!isempty(obs))
-                    crobs = reshape(obs{i}, robs[i], n[i] * robs[i+1])
+                    crobs = reshape(obs[i], robs[i], n[i] * robs[i+1])
                     crobs = phiobs * crobs
                     crobs = reshape(crobs, rx[i] * n[i], robs[i+1])
-                    u = [u, crobs]
+                    u = [u crobs]
                     u, rv = qr(u)
+                    u = Array(u)
                     phiobs = rv[:, r+1:r+robs[i+1]]
                     rv = rv[:, 1:r]
                     v = v * rv'
@@ -796,13 +816,13 @@ function amen_solve2(A, y, tol;
                 v = reshape(v, r, n[i+1], rx[i+2])
 
                 # Recompute phi.
-                phia[i+1], nrmsa[i] = compute_next_Phi(phia[i], u, crA[i], u, true)
-                phiy[i+1], nrmsy[i] = compute_next_Phi(phiy[i], u, [], cry[i], true)
+                phia[i+1], nrmsa[i] = compute_next_Phi_normed(phia[i], u, crA[i], u, true)
+                phiy[i+1], nrmsy[i] = compute_next_Phi_normed(phiy[i], u, [], cry[i], true)
                 # Add new scales
                 nrmsc = nrmsc * (nrmsy[i] / (nrmsa[i] * nrmsx[i]))
 
                 if (verb == 2)
-                    if (kicktype == "als") && (kickrank + kickrank2 > 0) && (~last_sweep)
+                    if (kicktype == "als") && (kickrank + kickrank2 > 0) && (!last_sweep)
                         fprintf("=amen_solve2=   block %d, dx: %3.3e, res: %3.3e, r: %d, |y|: %3.3e, |z|: %3.3e\n", i, dx, res_prev, r, norm(v(:)), norm(crznew(:)))
                     else
                         fprintf("=amen_solve2=   block %d, dx: %3.3e, res: %3.3e, r: %d\n", i, dx, res_prev, r)
@@ -824,14 +844,14 @@ function amen_solve2(A, y, tol;
                 # Just stuff back the last core
                 #             sol = u(:,1:r)*diag(s(1:r))*v(:,1:r)';
                 sol = reshape(sol, rx[i], n[i], rx[i+1])
-                crx{i} = sol
+                crx[i] = sol
             end
 
             if (verb > 2)
                 # testdata[1][i, swp] = toc(t_amen_solve) ##########################
                 if (verb > 3) || (i == d) # each microstep is returned only if really asked for
                     # Otherwise the memory will blow up
-                    x = vector_to_core(crx) * exp(sum(log(nrmsx))) # for test
+                    x = vector_to_core(TTTensor, crx) * exp(sum(log(nrmsx))) # for test
                     testdata[2][i, swp] = x
                 end
             end
@@ -839,7 +859,7 @@ function amen_solve2(A, y, tol;
         end
 
         if (verb > 0)
-            fprintf("=amen_solve= sweep %d, max_dx: %3.3e, max_res: %3.3e, max_rank: %g\n", swp, max_dx, max_res, max(rx))
+            @info "=amen_solve= sweep $swp, max_dx: $max_dx, max_res: $max_res, max_rank: $(maximum(rx, dims=1))" #swp max_dx max_res maximum(rx, dims=1)
         end
 
         if (last_sweep)
@@ -860,117 +880,211 @@ function amen_solve2(A, y, tol;
 
     # Recover the scales
     # Distribute norms equally...
-    nrmsx = exp(sum(log(nrmsx)) / d)
+
+    nrmsx = exp(sum(log.(nrmsx)) / d)
     # ... and plug them into x
     for i = 1:d
         crx[i] = crx[i] * nrmsx
     end
 
-    x = vector_to_core(crx)
-    if (nargout > 2)
-        if (kicktype == "als") && (kickrank > 0)
-            z = cell2core(tt_tensor, crz)
-        else
-            z = []
-        end
-    end
-    return x, testdata, z
+    x = vector_to_core(TTTensor, crx)
+    # if (nargout > 2)
+    #     if (kicktype == "als") && (kickrank > 0)
+    #         z = vector_to_core(TTTensor, crz)
+    #     else
+    #         z = []
+    #     end
+    # end
+    return x #, testdata, z
 end
 
 # new
+# function compute_next_Phi(Phi_prev, x, A, y, lr, extnrm=[])
+#     # Performs the recurrent Phi (or Psi) matrix computation
+#     # Phi = Phi_prev * (x'Ay).
+#     # If lr is true, computes Psi
+#     # if lr is false, computes Phi
+#     # A can be empty, then only x'y is computed.
+
+#     # Phi1: rx1, ry1, ra1, or rx1, ry1
+#     # Phi2: ry2, ra2, rx2, or ry2, rx2
+
+
+#     # if (nargin < 6)
+#     #     extnrm = []
+#     # end
+
+#     rx1 = size(x, 1)
+#     n = size(x, 2)
+#     rx2 = size(x, 3)
+#     ry1 = size(y, 1)
+#     m = size(y, 2)
+#     ry2 = size(y, 3)
+#     if (!isempty(A))
+#         ra1 = size(A, 1)
+#         ra2 = size(A, 4)
+#     else
+#         ra1 = 1
+#         ra2 = 1
+#     end
+
+#     if lr
+#         #lr: Phi1
+#         x = reshape(x, rx1, n * rx2)
+#         Phi = reshape(Phi_prev, rx1, ry1 * ra1)
+#         Phi = x' * Phi
+#         if (!isempty(A))
+#             Phi = reshape(Phi, n * rx2 * ry1, ra1)
+#             Phi = Phi'
+#             Phi = reshape(Phi, ra1 * n, rx2 * ry1)
+#             A = reshape(A, ra1 * n, m * ra2)
+#             Phi = A' * Phi
+#             Phi = reshape(Phi, m, ra2 * rx2 * ry1)
+#         else
+#             Phi = reshape(Phi, n, rx2 * ry1)
+#         end
+#         Phi = Phi'
+#         Phi = reshape(Phi, ra2 * rx2, ry1 * m)
+
+#         y = reshape(y, ry1 * m, ry2)
+#         Phi = Phi * y
+#         if (!isempty(A))
+#             Phi = reshape(Phi, ra2, rx2 * ry2)
+#             Phi = Phi'
+#         end
+#         Phi = reshape(Phi, rx2, ry2, ra2)
+#     else
+#         #rl: Phi2
+#         y = reshape(y, ry1 * m, ry2)
+#         Phi = reshape(Phi_prev, ry2, ra2 * rx2)
+#         Phi = y * Phi
+#         if (!isempty(A))
+#             Phi = reshape(Phi, ry1, m * ra2 * rx2)
+#             Phi = Phi'
+#             Phi = reshape(Phi, m * ra2, rx2 * ry1)
+#             A = reshape(A, ra1 * n, m * ra2)
+#             Phi = A * Phi
+#             Phi = reshape(Phi, ra1 * n * rx2, ry1)
+#             Phi = Phi'
+#         end
+
+#         Phi = reshape(Phi, ry1 * ra1, n * rx2)
+#         x = reshape(x, rx1, n * rx2)
+#         Phi = Phi * x'
+#         if (!isempty(A))
+#             Phi = reshape(Phi, ry1, ra1, rx1)
+#         else
+#             Phi = reshape(Phi, ry1, rx1)
+#         end
+#     end
+
+#     if (!isempty(x))
+#         # Extract the scale to prevent overload
+#         nrm = norm(Phi[:])
+#         if (nrm > 0)
+#             Phi = Phi / nrm
+#         else
+#             nrm = 1
+#         end
+#     elseif (!isempty(extnrm))
+#         # Override the normalization by the external one
+#         Phi = Phi / extnrm
+#     end
+#     return Phi, nrm
+# end
+
 function compute_next_Phi(Phi_prev, x, A, y, lr, extnrm=[])
     # Performs the recurrent Phi (or Psi) matrix computation
     # Phi = Phi_prev * (x'Ay).
-    # If lr is true, computes Psi
-    # if lr is false, computes Phi
+    # If direction is "lr", computes Psi
+    # if direction is "rl", computes Phi
     # A can be empty, then only x'y is computed.
-
+    
     # Phi1: rx1, ry1, ra1, or rx1, ry1
     # Phi2: ry2, ra2, rx2, or ry2, rx2
-
-
-    # if (nargin < 6)
-    #     extnrm = []
-    # end
-
-    rx1 = size(x, 1)
-    n = size(x, 2)
-    rx2 = size(x, 3)
-    ry1 = size(y, 1)
-    m = size(y, 2)
-    ry2 = size(y, 3)
+    
+    
+    # if (nargin<6)
+    #     extnrm = [];
+    # end;
+    
+    rx1 = size(x,1); n = size(x,2); rx2 = size(x,3);
+    ry1 = size(y,1); m = size(y,2); ry2 = size(y,3);
     if (!isempty(A))
-        ra1 = size(A, 1)
-        ra2 = size(A, 4)
+        ra1 = size(A,1); ra2 = size(A,4);
     else
-        ra1 = 1
-        ra2 = 1
-    end
-
+        ra1 = 1; ra2 = 1;
+    end;
+    
     if lr
         #lr: Phi1
-        x = reshape(x, rx1, n * rx2)
-        Phi = reshape(Phi_prev, rx1, ry1 * ra1)
-        Phi = x' * Phi
-        if (~isempty(A))
-            Phi = reshape(Phi, n * rx2 * ry1, ra1)
-            Phi = Phi'
-            Phi = reshape(Phi, ra1 * n, rx2 * ry1)
-            A = reshape(A, ra1 * n, m * ra2)
-            Phi = A' * Phi
-            Phi = reshape(Phi, m, ra2 * rx2 * ry1)
-        else
-            Phi = reshape(Phi, n, rx2 * ry1)
-        end
-        Phi = Phi'
-        Phi = reshape(Phi, ra2 * rx2, ry1 * m)
-
-        y = reshape(y, ry1 * m, ry2)
-        Phi = Phi * y
+        x = reshape(x, rx1, n*rx2);
+        Phi = reshape(Phi_prev, rx1, ry1*ra1);
+        Phi = x'*Phi;
         if (!isempty(A))
-            Phi = reshape(Phi, ra2, rx2 * ry2)
-            Phi = Phi'
-        end
-        Phi = reshape(Phi, rx2, ry2, ra2)
+            Phi = reshape(Phi, n*rx2*ry1, ra1);
+            Phi = Phi';
+            Phi = reshape(Phi, ra1*n, rx2*ry1);
+            A = reshape(A, ra1*n, m*ra2);
+            Phi = A'*Phi;
+            Phi = reshape(Phi, m, ra2*rx2*ry1);
+        else
+            Phi = reshape(Phi, n, rx2*ry1);
+        end;
+        Phi = Phi';
+        Phi = reshape(Phi, ra2*rx2, ry1*m);
+        
+        y = reshape(y, ry1*m, ry2);
+        Phi = Phi*y;
+        if (!isempty(A))
+            Phi = reshape(Phi, ra2, rx2*ry2);
+            Phi = Phi';
+        end;
+        Phi = reshape(Phi, rx2, ry2, ra2);
     else
         #rl: Phi2
-        y = reshape(y, ry1 * m, ry2)
-        Phi = reshape(Phi_prev, ry2, ra2 * rx2)
-        Phi = y * Phi
+        y = reshape(y, ry1*m, ry2);
+        Phi = reshape(Phi_prev, ry2, ra2*rx2);
+        Phi = y*Phi;
         if (!isempty(A))
-            Phi = reshape(Phi, ry1, m * ra2 * rx2)
-            Phi = Phi'
-            Phi = reshape(Phi, m * ra2, rx2 * ry1)
-            A = reshape(A, ra1 * n, m * ra2)
-            Phi = A * Phi
-            Phi = reshape(Phi, ra1 * n * rx2, ry1)
-            Phi = Phi'
-        end
-
-        Phi = reshape(Phi, ry1 * ra1, n * rx2)
-        x = reshape(x, rx1, n * rx2)
-        Phi = Phi * x'
+            Phi = reshape(Phi, ry1, m*ra2*rx2);
+            Phi = Phi';
+            Phi = reshape(Phi, m*ra2, rx2*ry1);
+            A = reshape(A, ra1*n, m*ra2);
+            Phi = A*Phi;
+            Phi = reshape(Phi, ra1*n*rx2, ry1);
+            Phi = Phi';
+        end;
+        
+        Phi = reshape(Phi, ry1*ra1, n*rx2);
+        x = reshape(x, rx1, n*rx2);
+        Phi = Phi*x';
         if (!isempty(A))
-            Phi = reshape(Phi, ry1, ra1, rx1)
+            Phi = reshape(Phi, ry1, ra1, rx1);
         else
-            Phi = reshape(Phi, ry1, rx1)
-        end
-    end
-
-    if (!isempty(x))
-        # Extract the scale to prevent overload
-        nrm = norm(Phi[:])
-        if (nrm > 0)
-            Phi = Phi / nrm
-        else
-            nrm = 1
-        end
-    elseif (!isempty(extnrm))
+            Phi = reshape(Phi, ry1, rx1);
+        end;
+    end;
+    
+  
+    if (!isempty(extnrm))
         # Override the normalization by the external one
-        Phi = Phi / extnrm
+        Phi = Phi/extnrm;
+    end;
+    return Phi
     end
-    return Phi, nrm
-end
+
+    function compute_next_Phi_normed(Phi_prev, x, A, y, direction, extnrm=[])
+        Phi = compute_next_Phi(Phi_prev, x, A, y, direction, extnrm)
+        # Extract the scale to prevent overload
+        nrm = norm(Phi[:]);
+        if (nrm>0)
+            Phi = Phi/nrm;
+        else
+            nrm=1;
+        end;
+        return Phi,nrm
+    end
 
 
 # new
@@ -1004,3 +1118,128 @@ function bfun3(Phi1, A, Phi2, x)
     return y
 end
 
+function solve3d_2ml(Phi1, A, Phi2, y, tol, x0, prec, local_restart, local_iters)
+    # Technical routine for iterative solution of local ALS/DMRG problems
+
+    dy = bfun3(Phi1, A, Phi2, x0)
+    dy = y - dy
+    norm_dy = norm(dy)
+    real_tol = tol / norm_dy
+    if (real_tol < 1)
+
+        # Phi1: ry1, rx1, ra1
+        ry1 = size(Phi1, 1)
+        rx1 = size(Phi1, 2)
+        ra1 = size(Phi1, 3)
+        # Phi2: rx2, ra2, ry2
+        ry2 = size(Phi2, 3)
+        rx2 = size(Phi2, 1)
+        ra2 = size(Phi2, 2)
+
+        n = size(A, 2)
+
+        if (prec == 3) # 3,r
+            jacs = reshape(Phi1, rx1^2, ra1)
+            jacs = jacs[1:[rx1 + 1]:[rx1^2], :]
+            jacs2 = reshape(A, ra1, n * n * ra2)
+            jacs = jacs * jacs2
+            jacs = reshape(jacs, rx1 * n * n, ra2)
+            jacs2 = permutedims(Phi2, [2, 3, 1])
+            jacs2 = reshape(jacs2, ra2, ry2 * rx2)
+            jacs = jacs * jacs2
+            jacs = reshape(jacs, rx1 * n, n, ry2, rx2)
+            jacs = permutedims(jacs, [1, 3, 2, 4])
+            jacs = reshape(jacs, rx1, n * ry2, n * rx2)
+            jacs = permutedims(jacs, [2, 3, 1])
+            for i = 1:rx1
+                jacs[:, :, i] = inv(jacs[:, :, i])
+            end
+        elseif (prec == 2) # 2,l
+            jacs = permutedims(Phi2, [2, 3, 1])
+            jacs = reshape(jacs, ra2, ry2 * rx2)
+            jacs = jacs[:, 1:[rx2 + 1]:[rx2^2]]
+            jacs2 = reshape(A, ra1 * n * n, ra2)
+            jacs = jacs2 * jacs
+            jacs = reshape(jacs, ra1, n * n * rx2)
+            jacs2 = reshape(Phi1, ry1 * rx1, ra1)
+            jacs = jacs2 * jacs
+            jacs = reshape(jacs, ry1, rx1, n, n * rx2)
+            jacs = permutedims(jacs, [1, 3, 2, 4])
+            jacs = reshape(jacs, ry1 * n, rx1 * n, rx2)
+            for i = 1:rx2
+                jacs[:, :, i] = inv(jacs[:, :, i])
+            end
+        elseif (prec == 1) # 1,c
+            jacs = reshape(Phi1, rx1^2, ra1)
+            jacs = jacs[1:[rx1 + 1]:[rx1^2], :]
+            jacs2 = reshape(A, ra1, n * n * ra2)
+            jacs = jacs * jacs2
+            jacs = reshape(jacs, rx1 * n * n, ra2)
+            jacs2 = permutedims(Phi2, [2, 3, 1])
+            jacs2 = reshape(jacs2, ra2, ry2 * rx2)
+            jacs2 = jacs2[:, 1:[rx2 + 1]:[rx2^2]]
+            jacs = jacs * jacs2
+            jacs = reshape(jacs, rx1, n * n * rx2)
+            jacs = jacs'
+            jacs = reshape(jacs, n, n, rx2 * rx1)
+            for i = 1:[rx2 * rx1]
+                jacs[:, :, i] = inv(jacs[:, :, i])
+            end
+        else
+            jacs = []
+        end
+
+        if (isempty(jacs))
+            # mv(x) = bfun3(Phi1, A, Phi2, x)
+            Ax = LinearMap(x -> bfun3(Phi1, A, Phi2, x),length(dy),length(dy))
+        else
+            # mv(x) = bfun3(Phi1, A, Phi2, jac_apply(jacs, prec, x, rx1, n, rx2))
+            Ax = LinearMap(x -> bfun3(Phi1, A, Phi2, jac_apply(jacs, prec, x, rx1, n, rx2)),length(dy),length(dy))
+
+        end
+
+        # [dx, flg, RELRES, iter]
+        dx = gmres(Ax, dy; 
+                    restart=local_restart, 
+                    reltol=real_tol, 
+                    maxiter=local_iters)
+        # iter = (iter(1) - 1) * local_restart + iter(2)
+        if (!isempty(jacs))
+            dx = jac_apply(jacs, prec, dx, rx1, n, rx2)
+        end
+        x = x0 + dx
+    else
+        x = x0
+    end
+    return x #, flg, iter
+end
+
+function jac_apply(jacs, prec, x, rx1, n, rx2)
+    if (prec == 3)
+        y = reshape(x, rx1, n * rx2)
+        y = y'
+        for i = 1:rx1
+            y[:, i] = jacs[:, :, i] * y[:, i]
+        end
+        y = y'
+        y = reshape(y, rx1 * n * rx2, 1)
+    elseif (prec == 2)
+        y = reshape(x, rx1 * n, rx2)
+        for i = 1:rx2
+            y[:, i] = jacs[:, :, i] * y[:, i]
+        end
+        y = reshape(y, rx1 * n * rx2, 1)
+    else
+        y = reshape(x, rx1, n * rx2)
+        y = y'
+        y = reshape(y, n, rx2 * rx1)
+        for i = 1:(rx2*rx1)
+            y[:, i] = jacs[:, :, i] * y[:, i]
+        end
+        y = reshape(y, n * rx2, rx1)
+        y = y'
+        y = reshape(y, rx1 * n * rx2, 1)
+    end
+
+    return y
+end

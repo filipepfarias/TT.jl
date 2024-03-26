@@ -147,7 +147,7 @@ function vector_to_core(::Type{TTTensor}, tt::Vector{T}) where {T<:AbstractArray
 end
 
 function rounded_diagonal_index(S::Vector{Float64}, precision::Float64)
-    if (norm(S) == 0)
+    if (opnorm(S) == 0)
         return 1
     end
 
@@ -343,7 +343,7 @@ function norm(tt::TTTensor)
         pos1 = pos1 + r[i] * n[i] * r[i+1]
     end
     pos1 = pos1 + r[d] * n[d] * r[d+1] - 1
-    nrm[d] = norm(core0[:])
+    nrm[d] = opnorm(core0[:])
 
     return prod(nrm)
 end
@@ -493,82 +493,32 @@ function vector_to_core(::Type{TTTensor}, cc::Vector)
     return TTTensor(d, r, n, cr, ps, [0])
 end
 
-
-
-"""
-Generates a random tensor
-   [TT]=TT_RAND(N,D,R) Generates a random orthogonal tensor with dimensions specified
-   by (N,D), where N can be a number of an array of dimension D, R is a
-   rank or a array of dimension d+1
-   [TT]=TT_RAND(N,D,R,DIR) changes the direction of orthogonalization:
-       dir=1  : left-to-right,
-       dir=-1 : right-to-left.
-
-
- TT-Toolbox 2.2, 2009-2012
-
-This is TT Toolbox, written by Ivan Oseledets et al.
-Institute of Numerical Mathematics, Moscow, Russia
-webpage: http://spring.inm.ras.ru/osel
-
-For all questions, bugs and suggestions please mail
-ivan.oseledets@gmail.com
----------------------------
-"""
-function tt_rand(d::Int, n::Vector{Int}, r::Vector{Int}, lr::Bool=true)
-
-    if (length(n) == 1)
-        n = n * ones(d)
-    end
-    if (length(r) == 1)
-        r = r * ones(d + 1)
-        r[1] = 1
-        r[d+1] = 1
-    end
-    # if ((nargin<4)||(isempty(dir)))
-    #     dir = 1;
-    # end;
-
-    r = r[:]
-    n = n[:]
-
-    ps = cumsum([1; n .* r[1:d] .* r[2:d+1]])
-
-    cr = zeros(ps[d+1])
-    if lr
-        # LR qr
-        for i = 1:d
-            cr1 = randn(r[i] * n[i], r[i+1])
-            cr1, rv = qr(cr1)
-            cr1 = Array(cr1)
-            r[i+1] = size(cr1, 2)
-            ps[i+1] = ps[i] + r[i] * n[i] * r[i+1]
-            cr[ps[i]:(ps[i+1]-1)] = cr1[:]
-        end
-        cr = cr[1:(ps[d+1]-1)]
-    else
-        # RL
-        for i = d:-1:1
-            cr1 = randn(n[i] * r[i+1], r[i])
-            cr1, rv = qr(cr1)
-            cr1 = Array(cr1)
-            cr1 = cr1'
-            r[i] = size(cr1, 1)
-            ps[i] = ps[i+1] - r[i] * n[i] * r(i + 1)
-            cr[ps[i]:(ps[i+1]-1)] = cr1[:]
-        end
-        cr = cr[ps[1]:(ps[d+1]-1)]
-        ps = ps - ps[1] + 1
+function vector_to_core!(tt::TTTensor, cc::Vector)
+    d = length(cc)
+    r = zeros(Int, d + 1)
+    n = zeros(Int, d)
+    ps = zeros(Int, d + 1)
+    ps[1] = 1
+    for i = 1:d
+        r[i] = size(cc[i], 1)
+        n[i] = size(cc[i], 2)
+        r[i+1] = size(cc[i], 3)
+        cc[i] = reshape(cc[i], r[i] * n[i] * r[i+1], 1)
+        ps[i+1] = ps[i] + r[i] * n[i] * r[i+1]
     end
 
-    # tt=tt_tensor;
-    # tt.n=n;
-    # tt.d=d;
-    # tt.r = r;
-    # tt.ps = ps;
-    # tt.core=cr;
-    return TTTensor(d, r, n, cr, ps, [0])
+    cr = reduce(vcat, cc);
+    tt.d = d;
+    tt.n = n;
+    tt.r = r;
+    tt.ps = ps;
+    tt.core = cr[:];
+    tt.over = [0];
+
+    #return TTTensor(d, r, n, cr, ps, [0])
+    return tt
 end
+
 
 """
 Kronecker product of two TT-tensors, little-endian tensor type
@@ -682,7 +632,8 @@ function round(tt::TTTensor, eps::Float64, rmax::Vector{Int})
     # Orthogonalization from left-to-tight
     for i = 1:d-1
         core0 = reshape(core0, r[i] * n[i], r[i+1])
-        core0, ru = qr(core0); core0 = Array(core0);
+        core0, ru = qr(core0)
+        core0 = Array(core0)
         nrm[i+1] = norm(ru)
         if (nrm[i+1] != 0)
             ru = ru ./ nrm[i+1]
@@ -690,17 +641,17 @@ function round(tt::TTTensor, eps::Float64, rmax::Vector{Int})
         core1 = cr[pos[i+1]:pos[i+2]-1]
         core1 = reshape(core1, r[i+1], n[i+1] * r[i+2])
         core1 = ru * core1
-        r[i+1] = size(core0, 2);
-        cr[pos1:pos1-1+r[i]*n[i]*r[i+1]] = core0[:];
+        r[i+1] = size(core0, 2)
+        cr[pos1:pos1-1+r[i]*n[i]*r[i+1]] = core0[:]
         cr[pos1+r[i]*n[i]*r[i+1]:pos1+r[i]*n[i]*r[i+1]+r[i+1]*n[i+1]*r[i+2]-1] = core1[:]
         core0 = core1
         pos1 = pos1 + r[i] * n[i] * r[i+1]
     end
-    pos1 = pos1 + r[d] * n[d] * r[d + 1] - 1
+    pos1 = pos1 + r[d] * n[d] * r[d+1] - 1
     cr = cr[1:pos1] # Truncate storage if required
     ep = eps / sqrt(d - 1)
     pos = cumsum([1; n .* r[1:d] .* r[2:d+1]])
-    core0 = cr[pos1-r[d]*n[d]*r[d + 1]+1:pos1]
+    core0 = cr[pos1-r[d]*n[d]*r[d+1]+1:pos1]
     for i = d:-1:2
         core1 = cr[pos[i-1]:pos[i]-1]
         core0 = reshape(core0, r[i], n[i] * r[i+1])
@@ -719,7 +670,7 @@ function round(tt::TTTensor, eps::Float64, rmax::Vector{Int})
         #  end
 
         #  s=diag(s);
-        r1 = rounded_diagonal_index(s, norm(s) * ep)
+        r1 = rounded_diagonal_index(s, opnorm(s) * ep)
         r1 = min(r1, rmax[i])
 
         u = u[:, 1:r1]
@@ -779,4 +730,40 @@ function round(tt::TTTensor, eps::Float64)
     return round(tt, eps, [prod(size(tt))])
 end
 
-
+"""
+%Cut the (i,j) part out of the TT-tensor
+%   [B]=CHUNK(B,I,J)
+%
+%
+% TT-Toolbox 2.2, 2009-2012
+%
+%This is TT Toolbox, written by Ivan Oseledets et al.
+%Institute of Numerical Mathematics, Moscow, Russia
+%webpage: http://spring.inm.ras.ru/osel
+%
+%For all questions, bugs and suggestions please mail
+%ivan.oseledets@gmail.com
+%---------------------------
+"""
+function chunk(b::TTTensor, i, j)
+    if (i > j)
+        tmp = j
+        j = i
+        i = tmp
+    end
+    ps = b.ps
+    r = b.r
+    n = b.n
+    cr = b.core
+    r = r[i:j+1]
+    n = n[i:j]
+    cr = cr[ps[i]:ps[j+1]-1]
+    ps = ps[i:j+1]
+    ps = ps .- ps[1] .+ 1
+    b.r = r
+    b.n = n
+    b.ps = ps
+    b.core = cr
+    b.d = length(n)
+    return b
+end

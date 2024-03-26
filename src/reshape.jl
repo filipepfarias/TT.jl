@@ -199,7 +199,7 @@ while (i1<=d1)
             u,s,v=svd(curcr1); 
         
             # s = diag(s);
-            r = rounded_diagonal_index(s, eps*norm(s)/sqrt(d2-1));
+            r = rounded_diagonal_index(s, eps*opnorm(s)/sqrt(d2-1));
             u = u[:,1:r];
             v = v[:,1:r]*diagm(s[1:r]);
             u = reshape(u, r1[i1], n12*r);

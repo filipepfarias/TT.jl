@@ -323,7 +323,7 @@ function funcrs(tt,fun,precision,y,n_sweeps)
             er_nrm=1;
         else
             
-            er_nrm=norm(yold-y)/norm(y);
+            er_nrm=opnorm(yold-y)/opnorm(y);
             yold=y;
         end
         if ( verb )

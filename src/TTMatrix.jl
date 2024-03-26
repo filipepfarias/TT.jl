@@ -89,11 +89,12 @@ function vector_to_core(::Type{TTMatrix}, tt::Vector{T}) where {T<:AbstractArray
     return TTMatrix(tt, n, m)
 end
 
-function core_to_vector(tt::TTMatrix)
+function core_to_vector(tm::TTMatrix)
+    tt=tm.tt
     d = tt.d
-    cc = Vector{Float}(undef, d)
-    n = tt.n[:]
-    m = tt.m[:]
+    cc = Vector{AbstractArray}(undef, d)
+    n = tm.n[:]
+    m = tm.m[:]
     r = tt.r[:]
     ps = tt.ps[:]
     cr = tt.core[:]
